@@ -1,114 +1,327 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MDSC — ChatGPT & Claude 履歴圧縮</title>
-
-<style>
-body{
-  font-family:Arial, sans-serif;
-  background:#0a0e17;
-  color:#e5e7eb;
-  padding:20px;
-}
-.container{max-width:800px;margin:auto;}
-button{
-  padding:10px 20px;
-  background:#06b6d4;
-  border:none;
-  border-radius:6px;
-  color:white;
-  cursor:pointer;
-}
-button:disabled{opacity:0.5}
-.dropzone{
-  border:2px dashed #1f2937;
-  padding:30px;
-  text-align:center;
-  margin-bottom:15px;
-  cursor:pointer;
-}
-.result{margin-top:20px;white-space:pre-wrap;background:#111827;padding:15px;border-radius:6px;}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDSC — ChatGPT & Claude 履歴圧縮</title>
+  <meta name="description" content="ChatGPT・Claude のAI会話履歴を意味密度で圧縮するWebツール（MDSC / ミーディスク）">
+  <style>
+    :root {
+      --bg: #0a0e17;
+      --surface: #111827;
+      --border: #1f2937;
+      --accent: #06b6d4;
+      --accent2: #8b5cf6;
+      --text: #e5e7eb;
+      --text2: #9ca3af;
+      --success: #10b981;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding: 20px;
+      background: linear-gradient(135deg, rgba(6,182,212,0.1), rgba(139,92,246,0.1));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+    .header h1 {
+      font-size: 1.8em;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .header p { color: var(--text2); font-size: 0.9em; }
+    .patent { font-size: 0.75em; color: var(--text2); margin-top: 6px; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
+    .tab-btn {
+      background: none; border: none; color: var(--text2);
+      padding: 12px 24px; font-size: 1em; font-weight: 600;
+      cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.3s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; margin-bottom: 16px;
+    }
+    .card h3 { font-size: 1.1em; margin-bottom: 12px; color: var(--accent); }
+    .dropzone {
+      border: 2px dashed var(--border); border-radius: 12px;
+      padding: 40px 20px; text-align: center; cursor: pointer;
+      transition: all 0.3s; margin-bottom: 16px;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent); background: rgba(6,182,212,0.05);
+    }
+    .dropzone .icon { font-size: 3em; margin-bottom: 12px; }
+    .dropzone .label { font-size: 1.1em; font-weight: 600; }
+    .dropzone .hint { font-size: 0.85em; color: var(--text2); margin-top: 8px; }
+    .btn {
+      display: inline-block; padding: 12px 28px; border: none;
+      border-radius: 8px; font-size: 1em; font-weight: 600;
+      cursor: pointer; transition: all 0.3s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-outline { background: none; border: 1px solid var(--accent); color: var(--accent); }
+    .btn-outline:hover { background: rgba(6,182,212,0.1); }
+    .progress-wrap { display: none; margin: 16px 0; }
+    .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
+      width: 0%; transition: width 0.5s;
+    }
+    .progress-text { font-size: 0.85em; color: var(--text2); margin-top: 6px; text-align: center; }
+    .result-area { display: none; }
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px; margin-bottom: 16px;
+    }
+    .stat-item {
+      background: rgba(6,182,212,0.05); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px; text-align: center;
+    }
+    .stat-value { font-size: 1.5em; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 0.8em; color: var(--text2); margin-top: 4px; }
+    .output-preview {
+      background: #000; border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px; max-height: 300px; overflow-y: auto;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 0.85em; white-space: pre-wrap; line-height: 1.5;
+    }
+    .error-msg {
+      display: none; background: rgba(239,68,68,0.1); border: 1px solid var(--danger);
+      border-radius: 8px; padding: 12px; color: var(--danger); margin: 12px 0;
+    }
+    .file-info {
+      display: none; padding: 10px 16px; background: rgba(16,185,129,0.1);
+      border: 1px solid var(--success); border-radius: 8px;
+      margin-bottom: 16px; font-size: 0.9em; color: var(--success);
+    }
+    .tool-card {
+      display: flex; align-items: center; gap: 16px; padding: 20px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 12px; transition: all 0.3s; cursor: pointer;
+    }
+    .tool-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .tool-icon { font-size: 2.5em; }
+    .tool-info { flex: 1; }
+    .tool-info h4 { margin-bottom: 4px; }
+    .tool-info p { font-size: 0.85em; color: var(--text2); }
+    .footer {
+      text-align: center; margin-top: 40px; padding-top: 20px;
+      border-top: 1px solid var(--border); font-size: 0.8em; color: var(--text2);
+    }
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      .header h1 { font-size: 1.4em; }
+      .dropzone { padding: 30px 15px; }
+      .tab-btn { padding: 10px 16px; font-size: 0.9em; }
+    }
+  </style>
 </head>
 <body>
+  <div class="container">
+    <div class="header">
+      <h1>MDSC — ミーディスク</h1>
+      <p>ChatGPT & Claude 履歴を意味密度で圧縮</p>
+      <div class="patent">特願2026-026882 | Meaning Density State Compression</div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('compress')">MDSC圧縮</button>
+      <button class="tab-btn" onclick="switchTab('tools')">ツール & リンク</button>
+    </div>
+    <div id="tab-compress" class="tab-content active">
+      <div class="card">
+        <h3>📁 ファイル選択</h3>
+        <div class="dropzone" id="dropzone"
+             ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+             ondrop="handleDrop(event)"
+             onclick="document.getElementById('fileInput').click()">
+          <div class="icon">📤</div>
+          <div class="label">JSONファイルをドラッグ＆ドロップ</div>
+          <div class="hint">またはクリックしてファイルを選択<br>ChatGPT / Claude 対応 | 最大50MB</div>
+        </div>
+        <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileSelect(event)">
+        <div class="file-info" id="fileInfo"></div>
+        <div style="text-align:center;">
+          <button class="btn btn-primary" id="compressBtn" disabled onclick="startCompression()">🔬 圧縮開始</button>
+        </div>
+      </div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-text" id="progressText">処理中...</div>
+      </div>
+      <div class="error-msg" id="errorMsg"></div>
+      <div class="result-area" id="resultArea">
+        <div class="card">
+          <h3>📊 圧縮結果</h3>
+          <div class="stats-grid">
+            <div class="stat-item"><div class="stat-value" id="statRate">-</div><div class="stat-label">圧縮率</div></div>
+            <div class="stat-item"><div class="stat-value" id="statInput">-</div><div class="stat-label">入力文字数</div></div>
+            <div class="stat-item"><div class="stat-value" id="statOutput">-</div><div class="stat-label">出力文字数</div></div>
+            <div class="stat-item"><div class="stat-value" id="statConvs">-</div><div class="stat-label">会話数</div></div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <button class="btn btn-primary" onclick="downloadResult()">💾 MDファイルをダウンロード</button>
+          </div>
+          <h3 style="margin-top:16px;">📄 プレビュー</h3>
+          <div class="output-preview" id="outputPreview"></div>
+        </div>
+      </div>
+    </div>
+    <div id="tab-tools" class="tab-content">
+      <div class="tool-card" onclick="window.open('https://ryoled2000-maker.github.io/json-conversation-splitter/splitter.html','_blank')">
+        <div class="tool-icon">✂️</div>
+        <div class="tool-info">
+          <h4>JSON Splitter — 履歴分割ツール</h4>
+          <p>大きなJSONを月別・50MB以内に自動分割</p>
+        </div>
+        <span class="btn btn-outline">開く →</span>
+      </div>
+      <div class="card" style="margin-top:20px;">
+        <h3>ℹ️ MDSCについて</h3>
+        <p style="color:var(--text2);line-height:1.7;">
+          MDSC（Meaning Density State Compressor / ミーディスク）は、
+          AIとの会話履歴を<strong style="color:var(--accent)">意味密度</strong>に基づいて圧縮する技術です。
+          特許出願番号: 特願2026-026882
+        </p>
+      </div>
+    </div>
+    <div class="footer">MDSC v1.3 | 特願2026-026882 | © 2026 RYO</div>
+  </div>
 
-<div class="container">
-<h2>MDSC — ミーディスク</h2>
-<p>ChatGPT & Claude 履歴を意味密度で圧縮</p>
+  <script>
+    
+    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec';
 
-<div class="dropzone" onclick="document.getElementById('fileInput').click()">
-JSONファイルをクリックして選択
-</div>
+    let selectedFile = null;
+    let selectedContent = null;
+    let resultMarkdown = null;
 
-<input type="file" id="fileInput" accept=".json" style="display:none">
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('tab-' + tabName).classList.add('active');
+    }
+    function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+    function handleDragLeave(e) { e.currentTarget.classList.remove('dragover'); }
+    function handleDrop(e) {
+      e.preventDefault(); e.currentTarget.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) loadFile(e.dataTransfer.files[0]);
+    }
+    function handleFileSelect(e) { if (e.target.files.length > 0) loadFile(e.target.files[0]); }
 
-<br>
-<button id="compressBtn" disabled>圧縮開始</button>
-
-<div class="result" id="result"></div>
-
-<hr>
-<h3>ツール</h3>
-<a href="https://ryoled2000-maker.github.io/json-conversation-splitter/splitter.html" target="_blank">
-JSON Splitter を開く
-</a>
-
-</div>
-
-<script>
-
-const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec';
-
-let selectedFile = null;
-
-const fileInput = document.getElementById('fileInput');
-const compressBtn = document.getElementById('compressBtn');
-const resultArea = document.getElementById('result');
-
-fileInput.addEventListener('change', e=>{
-  if(e.target.files.length > 0){
-    selectedFile = e.target.files[0];
-    compressBtn.disabled = false;
-  }
-});
-
-compressBtn.addEventListener('click', async ()=>{
-  if(!selectedFile) return;
-
-  compressBtn.disabled = true;
-  resultArea.textContent = "処理中...";
-
-  try{
-    const text = await selectedFile.text();
-
-    const response = await fetch(GAS_ENDPOINT,{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:text
-    });
-
-    if(!response.ok){
-      throw new Error("HTTP " + response.status);
+    function loadFile(file) {
+      if (!file.name.endsWith('.json')) { showError('JSONファイルを選択してください'); return; }
+      if (file.size > 50 * 1024 * 1024) {
+        showError('ファイルサイズが50MBを超えています。JSON Splitterで分割してください。');
+        return;
+      }
+      selectedFile = file;
+      const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+      document.getElementById('fileInfo').style.display = 'block';
+      document.getElementById('fileInfo').textContent = `✅ ${file.name} (${sizeMB} MB)`;
+      document.getElementById('compressBtn').disabled = false;
+      document.getElementById('resultArea').style.display = 'none';
+      document.getElementById('errorMsg').style.display = 'none';
     }
 
-    const data = await response.json();
+    async function startCompression() {
+      if (!selectedFile) return;
+      const btn = document.getElementById('compressBtn');
+      btn.disabled = true; btn.textContent = '⏳ 処理中...';
+      showProgress(true, 10, 'ファイル読み込み中...');
+      hideError();
 
-    if(!data.success){
-      throw new Error(data.error || "圧縮失敗");
+      try {
+        const text = await selectedFile.text();
+        JSON.parse(text); // バリデーション
+        showProgress(true, 30, 'GASサーバーへ送信中...');
+
+        const resp = await fetch(GAS_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: text,
+          redirect: 'follow'
+        });
+
+        showProgress(true, 70, 'レスポンス処理中...');
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const result = await resp.json();
+
+        if (!result.success) throw new Error(result.error || '圧縮に失敗しました');
+
+        showProgress(true, 100, '完了！');
+        displayResult(result.data);
+      } catch (err) {
+        showError('処理中にエラーが発生しました: ' + err.message);
+        showProgress(false);
+      }
+      resetButton();
     }
 
-    resultArea.textContent = data.data.markdown;
+    function displayResult(data) {
+      resultMarkdown = data.markdown;
+      const s = data.stats;
+      document.getElementById('statRate').textContent = s.compressionRate + '%';
+      document.getElementById('statInput').textContent = formatNum(s.inputChars);
+      document.getElementById('statOutput').textContent = formatNum(s.outputChars);
+      document.getElementById('statConvs').textContent = s.conversationCount;
+      const preview = resultMarkdown.length > 2000
+        ? resultMarkdown.slice(0, 2000) + '\n\n... [以下省略]'
+        : resultMarkdown;
+      document.getElementById('outputPreview').textContent = preview;
+      document.getElementById('resultArea').style.display = 'block';
+      setTimeout(() => showProgress(false), 1000);
+    }
 
-  }catch(err){
-    resultArea.textContent = "❌ エラー: " + err.message;
-  }
+    function downloadResult() {
+      if (!resultMarkdown) return;
+      const blob = new Blob([resultMarkdown], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'MDSC_compressed_' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '.md';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
 
-  compressBtn.disabled = false;
-});
-
-</script>
-
+    function showProgress(show, pct, text) {
+      document.getElementById('progressWrap').style.display = show ? 'block' : 'none';
+      if (pct !== undefined) document.getElementById('progressFill').style.width = pct + '%';
+      if (text) document.getElementById('progressText').textContent = text;
+    }
+    function showError(msg) { const el = document.getElementById('errorMsg'); el.textContent = '❌ ' + msg; el.style.display = 'block'; }
+    function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
+    function resetButton() {
+      const btn = document.getElementById('compressBtn');
+      btn.disabled = false; btn.textContent = '🔬 圧縮開始';
+    }
+    function formatNum(n) {
+      if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+      return String(n);
+    }
+  </script>
 </body>
 </html>
