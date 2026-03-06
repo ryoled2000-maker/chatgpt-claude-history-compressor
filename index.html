@@ -1,31 +1,74 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
 <title>MDSC Redirect</title>
 
-<!-- 即リダイレクト -->
+<meta name="robots" content="noindex">
+
+<!-- ① HTMLリダイレクト（最も確実） -->
 <meta http-equiv="refresh" content="0; url=https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec">
 
 <script>
+
+// ② JavaScriptリダイレクト（高速）
 window.location.replace(
 "https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec"
 );
+
 </script>
+
+<style>
+
+body{
+font-family:Arial, Helvetica, sans-serif;
+background:#0a0e17;
+color:#e5e7eb;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+margin:0;
+}
+
+.box{
+text-align:center;
+padding:30px;
+border:1px solid #1f2937;
+border-radius:12px;
+background:#111827;
+}
+
+a{
+color:#06b6d4;
+text-decoration:none;
+font-weight:bold;
+}
+
+</style>
 
 </head>
 
 <body>
 
-<p>MDSC WebAppへ移動しています…</p>
+<div class="box">
+
+<h2>MDSC WebAppへ移動しています…</h2>
 
 <p>
-自動で移動しない場合はこちら  
-<br>
+自動で移動しない場合はこちら
+</p>
+
+<p>
 <a href="https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec">
 MDSCを開く
 </a>
 </p>
+
+</div>
 
 </body>
 </html>
