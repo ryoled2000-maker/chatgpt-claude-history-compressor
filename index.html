@@ -157,7 +157,7 @@
              onclick="document.getElementById('fileInput').click()">
           <div class="icon">📤</div>
           <div class="label">JSONファイルをドラッグ＆ドロップ</div>
-          <div class="hint">またはクリックしてファイルを選択<br>ChatGPT / Claude 対応 | 最大50MB</div>
+          <div class="hint">またはクリックしてファイルを選択<br>ChatGPT / Claude 対応 | 最大20MB</div>
         </div>
         <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileSelect(event)">
         <div class="file-info" id="fileInfo"></div>
@@ -234,8 +234,8 @@
     function loadFile(file) {
       if (!file) { showError('ファイルを選択してください'); return; }
       if (!file.name.toLowerCase().endsWith('.json')) { showError('JSONファイルを選択してください'); return; }
-      if (file.size > 50 * 1024 * 1024) {
-        showError('ファイルサイズが50MBを超えています。JSON Splitterで分割してください。');
+      if (file.size > 20 * 1024 * 1024) {
+        showError('ファイルサイズが20MBを超えています。JSON Splitterで分割してください。');
         return;
       }
       selectedFile = file;
@@ -262,7 +262,7 @@
         const resp = await fetch(GAS_ENDPOINT, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'text/plain'
           },
           body: JSON.stringify({
             json: text
