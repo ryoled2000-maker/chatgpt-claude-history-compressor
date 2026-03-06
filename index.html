@@ -80,6 +80,8 @@
     }
     .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
     .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-outline { background: none; border: 1px solid var(--accent); color: var(--accent); }
+    .btn-outline:hover { background: rgba(6,182,212,0.1); }
     .progress-wrap { display: none; margin: 16px 0; }
     .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
     .progress-fill {
@@ -101,108 +103,327 @@
     .output-preview {
       background: #000; border: 1px solid var(--border); border-radius: 8px;
       padding: 16px; max-height: 300px; overflow-y: auto;
-      font-family: 'Consolas', monospace;
-      font-size: 0.85em; white-space: pre-wrap;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 0.85em; white-space: pre-wrap; line-height: 1.5;
+    }
+    .error-msg {
+      display: none; background: rgba(239,68,68,0.1); border: 1px solid var(--danger);
+      border-radius: 8px; padding: 12px; color: var(--danger); margin: 12px 0;
+    }
+    .file-info {
+      display: none; padding: 10px 16px; background: rgba(16,185,129,0.1);
+      border: 1px solid var(--success); border-radius: 8px;
+      margin-bottom: 16px; font-size: 0.9em; color: var(--success);
+    }
+    .tool-card {
+      display: flex; align-items: center; gap: 16px; padding: 20px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 12px; transition: all 0.3s; cursor: pointer;
+    }
+    .tool-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .tool-icon { font-size: 2.5em; }
+    .tool-info { flex: 1; }
+    .tool-info h4 { margin-bottom: 4px; }
+    .tool-info p { font-size: 0.85em; color: var(--text2); }
+    .footer {
+      text-align: center; margin-top: 40px; padding-top: 20px;
+      border-top: 1px solid var(--border); font-size: 0.8em; color: var(--text2);
+    }
+    @media (max-width: 600px) {
+      body { padding: 10px; }
+      .header h1 { font-size: 1.4em; }
+      .dropzone { padding: 30px 15px; }
+      .tab-btn { padding: 10px 16px; font-size: 0.9em; }
     }
   </style>
 </head>
-
 <body>
+  <div class="container">
+    <div class="header">
+      <h1>MDSC — ミーディスク</h1>
+      <p>ChatGPT & Claude 履歴を意味密度で圧縮</p>
+      <div class="patent">特願2026-026882 | Meaning Density State Compression</div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('compress', event)">MDSC圧縮</button>
+      <button class="tab-btn" onclick="switchTab('tools', event)">ツール & リンク</button>
+    </div>
+    <div id="tab-compress" class="tab-content active">
+      <div class="card">
+        <h3>📁 ファイル選択</h3>
+        <div class="dropzone" id="dropzone"
+             ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+             ondrop="handleDrop(event)"
+             onclick="document.getElementById('fileInput').click()">
+          <div class="icon">📤</div>
+          <div class="label">JSONファイルをドラッグ＆ドロップ</div>
+          <div class="hint">またはクリックしてファイルを選択<br>ChatGPT / Claude 対応 | 最大20MB</div>
+        </div>
+        <input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileSelect(event)">
+        <div class="file-info" id="fileInfo"></div>
+        <div style="text-align:center;">
+          <button class="btn btn-primary" id="compressBtn" disabled onclick="startCompression()">🔬 圧縮開始</button>
+        </div>
+      </div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-text" id="progressText">処理中...</div>
+      </div>
+      <div class="error-msg" id="errorMsg"></div>
+      <div class="result-area" id="resultArea">
+        <div class="card">
+          <h3>📊 圧縮結果</h3>
+          <div class="stats-grid">
+            <div class="stat-item"><div class="stat-value" id="statRate">-</div><div class="stat-label">圧縮率</div></div>
+            <div class="stat-item"><div class="stat-value" id="statInput">-</div><div class="stat-label">入力文字数</div></div>
+            <div class="stat-item"><div class="stat-value" id="statOutput">-</div><div class="stat-label">出力文字数</div></div>
+            <div class="stat-item"><div class="stat-value" id="statConvs">-</div><div class="stat-label">会話数</div></div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <button class="btn btn-primary" onclick="downloadResult()">💾 MDファイルをダウンロード</button>
+          </div>
+          <h3 style="margin-top:16px;">📄 プレビュー</h3>
+          <div class="output-preview" id="outputPreview"></div>
+        </div>
+      </div>
+    </div>
+    <div id="tab-tools" class="tab-content">
+      <div class="tool-card" onclick="window.open('https://ryoled2000-maker.github.io/json-conversation-splitter/splitter.html','_blank')">
+        <div class="tool-icon">✂️</div>
+        <div class="tool-info">
+          <h4>JSON Splitter — 履歴分割ツール</h4>
+          <p>大きなJSONを月別・50MB以内に自動分割</p>
+        </div>
+        <span class="btn btn-outline">開く →</span>
+      </div>
+      <div class="card" style="margin-top:20px;">
+        <h3>ℹ️ MDSCについて</h3>
+        <p style="color:var(--text2);line-height:1.7;">
+          MDSC（Meaning Density State Compressor / ミーディスク）は、
+          AIとの会話履歴を<strong style="color:var(--accent)">意味密度</strong>に基づいて圧縮する技術です。
+          特許出願番号: 特願2026-026882
+        </p>
+      </div>
+    </div>
+    <div class="footer">MDSC v1.3 | 特願2026-026882 | © 2026 RYO</div>
+  </div>
 
-<div class="container">
+  <iframe id="mdscTransportFrame" name="mdscTransportFrame" style="display:none;"></iframe>
 
-<div class="header">
-<h1>MDSC — ミーディスク</h1>
-<p>ChatGPT & Claude 履歴を意味密度で圧縮</p>
-<div class="patent">特願2026-026882 | Meaning Density State Compression</div>
-</div>
+  <form id="mdscTransportForm" method="POST" target="mdscTransportFrame" style="display:none;">
+    <input type="hidden" name="json" id="transportJson">
+    <input type="hidden" name="transport" value="postmessage">
+    <input type="hidden" name="parentOrigin" id="parentOrigin">
+  </form>
 
-<div class="card">
+  <script>
+    const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec';
 
-<h3>📁 ファイル選択</h3>
+    let selectedFile = null;
+    let selectedContent = null;
+    let resultMarkdown = null;
+    let responseTimeoutId = null;
+    let isSubmitting = false;
 
-<div class="dropzone" onclick="fileInput.click()">
-<div class="icon">📤</div>
-<div class="label">JSONファイルをドラッグ＆ドロップ</div>
-<div class="hint">またはクリックして選択（最大20MB）</div>
-</div>
+    function switchTab(tabName, e) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      const target = e && (e.currentTarget || e.target);
+      if (target) target.classList.add('active');
+      document.getElementById('tab-' + tabName).classList.add('active');
+    }
 
-<input id="fileInput" type="file" accept=".json" style="display:none">
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.currentTarget.classList.add('dragover');
+    }
 
-<div style="text-align:center;margin-top:20px;">
-<button class="btn btn-primary" onclick="startCompression()">🔬 圧縮開始</button>
-</div>
+    function handleDragLeave(e) {
+      e.currentTarget.classList.remove('dragover');
+    }
 
-</div>
+    function handleDrop(e) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) loadFile(e.dataTransfer.files[0]);
+    }
 
-<div class="progress-wrap" id="progressWrap">
-<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-<div class="progress-text" id="progressText">処理中...</div>
-</div>
+    function handleFileSelect(e) {
+      if (e.target.files.length > 0) loadFile(e.target.files[0]);
+    }
 
-<div class="result-area" id="resultArea">
+    function loadFile(file) {
+      if (!file) {
+        showError('ファイルを選択してください');
+        return;
+      }
 
-<div class="card">
+      if (!file.name.toLowerCase().endsWith('.json')) {
+        showError('JSONファイルを選択してください');
+        return;
+      }
 
-<h3>📊 圧縮結果</h3>
+      if (file.size > 20 * 1024 * 1024) {
+        showError('ファイルサイズが20MBを超えています。JSON Splitterで分割してください。');
+        return;
+      }
 
-<div class="stats-grid">
-<div class="stat-item"><div class="stat-value" id="statRate">-</div><div class="stat-label">圧縮率</div></div>
-<div class="stat-item"><div class="stat-value" id="statInput">-</div><div class="stat-label">入力文字数</div></div>
-<div class="stat-item"><div class="stat-value" id="statOutput">-</div><div class="stat-label">出力文字数</div></div>
-<div class="stat-item"><div class="stat-value" id="statConvs">-</div><div class="stat-label">会話数</div></div>
-</div>
+      selectedFile = file;
+      selectedContent = null;
 
-<h3>📄 プレビュー</h3>
+      const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+      document.getElementById('fileInfo').style.display = 'block';
+      document.getElementById('fileInfo').textContent = `✅ ${file.name} (${sizeMB} MB)`;
+      document.getElementById('compressBtn').disabled = false;
+      document.getElementById('resultArea').style.display = 'none';
+      document.getElementById('errorMsg').style.display = 'none';
+    }
 
-<div class="output-preview" id="outputPreview"></div>
+    function isTrustedGasOrigin(origin) {
+      return origin === 'https://script.google.com' || origin === 'https://script.googleusercontent.com';
+    }
 
-</div>
+    window.addEventListener('message', function(event) {
+      if (!isTrustedGasOrigin(event.origin)) return;
+      if (!isSubmitting) return;
 
-</div>
+      clearTimeout(responseTimeoutId);
+      responseTimeoutId = null;
+      isSubmitting = false;
 
-</div>
+      let result = event.data;
 
-<script>
+      if (typeof result === 'string') {
+        try {
+          result = JSON.parse(result);
+        } catch (e) {
+          showError('GASレスポンスの解析に失敗しました');
+          showProgress(false);
+          resetButton();
+          return;
+        }
+      }
 
-const GAS_ENDPOINT =
-"https://script.google.com/macros/s/AKfycbyxk8phS7ehOTymIj2NlkMmrIFKbfnTJ1KWjKQYnk-vQ9zhGz8qtuQUtqGtn-vJZqfS/exec";
+      if (!result || typeof result !== 'object') {
+        showError('GASレスポンス形式が不正です');
+        showProgress(false);
+        resetButton();
+        return;
+      }
 
-let selectedFile=null;
+      showProgress(true, 70, 'レスポンス処理中...');
 
-fileInput.onchange=e=>{
-selectedFile=e.target.files[0];
-};
+      if (!result.success) {
+        showError('処理中にエラーが発生しました: ' + (result.error || '圧縮に失敗しました'));
+        showProgress(false);
+        resetButton();
+        return;
+      }
 
-async function startCompression(){
+      showProgress(true, 100, '完了！');
+      displayResult(result.data);
+      resetButton();
+    });
 
-if(!selectedFile){
-alert("JSONファイルを選択してください");
-return;
-}
+    async function startCompression() {
+      if (!selectedFile) return;
+      if (isSubmitting) return;
 
-const text=await selectedFile.text();
+      const btn = document.getElementById('compressBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ 処理中...';
 
-const form=document.createElement("form");
-form.method="POST";
-form.action=GAS_ENDPOINT;
-form.target="mdscFrame";
+      showProgress(true, 10, 'ファイル読み込み中...');
+      hideError();
 
-const input=document.createElement("input");
-input.type="hidden";
-input.name="json";
-input.value=text;
+      try {
+        const text = await selectedFile.text();
+        JSON.parse(text);
+        selectedContent = text;
 
-form.appendChild(input);
-document.body.appendChild(form);
+        showProgress(true, 30, 'GASサーバーへ送信中...');
 
-form.submit();
+        const form = document.getElementById('mdscTransportForm');
+        form.action = GAS_ENDPOINT;
+        document.getElementById('transportJson').value = text;
+        document.getElementById('parentOrigin').value = window.location.origin;
 
-}
+        isSubmitting = true;
 
-</script>
+        responseTimeoutId = setTimeout(() => {
+          isSubmitting = false;
+          showError('処理中にエラーが発生しました: GASから応答がありません。通信または処理時間超過の可能性があります。');
+          showProgress(false);
+          resetButton();
+        }, 180000);
 
-<iframe name="mdscFrame" style="display:none;"></iframe>
+        form.submit();
+      } catch (err) {
+        isSubmitting = false;
+        clearTimeout(responseTimeoutId);
+        responseTimeoutId = null;
+        showError('処理中にエラーが発生しました: ' + err.message);
+        showProgress(false);
+        resetButton();
+      }
+    }
 
+    function displayResult(data) {
+      resultMarkdown = data.markdown;
+      const s = data.stats;
+      document.getElementById('statRate').textContent = s.compressionRate + '%';
+      document.getElementById('statInput').textContent = formatNum(s.inputChars);
+      document.getElementById('statOutput').textContent = formatNum(s.outputChars);
+      document.getElementById('statConvs').textContent = s.conversationCount;
+
+      const preview = resultMarkdown.length > 2000
+        ? resultMarkdown.slice(0, 2000) + '\n\n... [以下省略]'
+        : resultMarkdown;
+
+      document.getElementById('outputPreview').textContent = preview;
+      document.getElementById('resultArea').style.display = 'block';
+
+      setTimeout(() => showProgress(false), 1000);
+    }
+
+    function downloadResult() {
+      if (!resultMarkdown) return;
+      const blob = new Blob([resultMarkdown], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'MDSC_compressed_' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '.md';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function showProgress(show, pct, text) {
+      document.getElementById('progressWrap').style.display = show ? 'block' : 'none';
+      if (pct !== undefined) document.getElementById('progressFill').style.width = pct + '%';
+      if (text) document.getElementById('progressText').textContent = text;
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = '❌ ' + msg;
+      el.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('errorMsg').style.display = 'none';
+    }
+
+    function resetButton() {
+      const btn = document.getElementById('compressBtn');
+      btn.disabled = false;
+      btn.textContent = '🔬 圧縮開始';
+    }
+
+    function formatNum(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return String(n);
+    }
+  </script>
 </body>
 </html>
