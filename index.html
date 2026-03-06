@@ -145,8 +145,8 @@
       <div class="patent">特願2026-026882 | Meaning Density State Compression</div>
     </div>
     <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('compress')">MDSC圧縮</button>
-      <button class="tab-btn" onclick="switchTab('tools')">ツール & リンク</button>
+      <button class="tab-btn active" onclick="switchTab('compress', event)">MDSC圧縮</button>
+      <button class="tab-btn" onclick="switchTab('tools', event)">ツール & リンク</button>
     </div>
     <div id="tab-compress" class="tab-content active">
       <div class="card">
@@ -216,10 +216,11 @@
     let selectedContent = null;
     let resultMarkdown = null;
 
-    function switchTab(tabName) {
+    function switchTab(tabName, e) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      event.target.classList.add('active');
+      const target = e && (e.currentTarget || e.target);
+      if (target) target.classList.add('active');
       document.getElementById('tab-' + tabName).classList.add('active');
     }
     function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
@@ -231,7 +232,8 @@
     function handleFileSelect(e) { if (e.target.files.length > 0) loadFile(e.target.files[0]); }
 
     function loadFile(file) {
-      if (!file.name.endsWith('.json')) { showError('JSONファイルを選択してください'); return; }
+      if (!file) { showError('ファイルを選択してください'); return; }
+      if (!file.name.toLowerCase().endsWith('.json')) { showError('JSONファイルを選択してください'); return; }
       if (file.size > 50 * 1024 * 1024) {
         showError('ファイルサイズが50MBを超えています。JSON Splitterで分割してください。');
         return;
@@ -259,14 +261,28 @@
 
         const resp = await fetch(GAS_ENDPOINT, {
           method: 'POST',
-          body: new URLSearchParams({json: text}),
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            json: text
+          }),
           redirect: 'follow'
         });
 
         showProgress(true, 70, 'レスポンス処理中...');
 
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const result = await resp.json();
+        const raw = await resp.text();
+        if (!raw || !raw.trim()) throw new Error('GASレスポンスが空です');
+
+        let result;
+        try {
+          result = JSON.parse(raw);
+        } catch(e) {
+          console.error('GAS response:', raw);
+          throw new Error('GASレスポンスがJSONではありません');
+        }
 
         if (!result.success) throw new Error(result.error || '圧縮に失敗しました');
 
