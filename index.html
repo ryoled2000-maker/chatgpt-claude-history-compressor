@@ -3,771 +3,878 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JSON Splitter — MDSC Tools</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<title>MDSC — AI対話履歴 圧縮ツール</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
-
   :root {
-    --bg      : #0d0f14;
-    --surface : #13161e;
-    --border  : #1e2330;
-    --accent  : #00e5ff;
-    --accent2 : #7c3aed;
-    --accent3 : #ff6b35;
-    --text    : #c8d0e0;
-    --text-dim: #5a6480;
-    --success : #00c97a;
-    --error   : #ff4d6d;
-    --warn    : #ffb547;
+    --bg:       #0f1117;
+    --surface:  #1a1d27;
+    --border:   #2d3148;
+    --accent:   #6c63ff;
+    --accent2:  #4fc3f7;
+    --text:     #e8eaf0;
+    --text-dim: #7b7f99;
+    --success:  #4caf50;
+    --warn:     #ff9800;
+    --error:    #f44336;
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
 
-  body {
-    background : var(--bg);
-    color      : var(--text);
-    font-family: 'Zen Kaku Gothic New', sans-serif;
-    min-height : 100vh;
-    display    : flex;
-    flex-direction: column;
-    align-items: center;
-    padding    : 40px 16px 80px;
+  header { padding: 24px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 22px; font-weight: 700; }
+  header .badge { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+
+  .container { max-width: 860px; margin: 0 auto; padding: 32px 20px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--accent2); }
+
+  /* ドロップゾーン */
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px; padding: 40px 20px;
+    text-align: center; cursor: pointer; transition: all .2s;
+  }
+  #dropzone:hover, #dropzone.drag-over { border-color: var(--accent); background: #1e2035; }
+  #dropzone .icon { font-size: 36px; margin-bottom: 8px; }
+  #dropzone p { color: var(--text-dim); font-size: 14px; }
+  #dropzone input { display: none; }
+
+  /* ファイルリスト */
+  #fileList { margin-top: 12px; }
+  .file-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg); border-radius: 8px; margin-top: 8px; font-size: 13px; }
+  .file-item .name { flex: 1; }
+  .file-item .size { color: var(--text-dim); }
+  .file-item .badge-fmt { font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 700; }
+  .badge-chatgpt { background: #10a37f22; color: #10a37f; border: 1px solid #10a37f44; }
+  .badge-claude  { background: #d4722022; color: #d47220; border: 1px solid #d4722044; }
+  .badge-grok    { background: #6c63ff22; color: #6c63ff; border: 1px solid #6c63ff44; }
+  .badge-generic { background: #ff980022; color: #ff9800; border: 1px solid #ff980044; }
+  .badge-skip    { background: #ff444422; color: #ff8888; border: 1px solid #ff444444; }
+  .file-item .remove { background: none; border: none; color: var(--error); cursor: pointer; font-size: 16px; }
+
+  /* ボタン */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: .2s; }
+  .btn-primary { background: var(--accent); color: #fff; width: 100%; justify-content: center; margin-top: 16px; }
+  .btn-primary:hover:not(:disabled) { background: #5a52e0; }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-dl { background: var(--success); color: #fff; margin-top: 12px; }
+  .btn-dl:hover { background: #388e3c; }
+
+  /* プログレス */
+  #progressWrap { display: none; margin-top: 16px; }
+  .progress-bar-bg { background: var(--border); border-radius: 6px; height: 8px; overflow: hidden; }
+  .progress-bar { height: 8px; background: var(--accent); border-radius: 6px; transition: width .3s; }
+  .progress-label { font-size: 13px; color: var(--text-dim); margin-top: 6px; text-align: center; }
+
+  /* 結果 */
+  #resultCard { display: none; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat-box { background: var(--bg); border-radius: 8px; padding: 14px; text-align: center; }
+  .stat-val { font-size: 26px; font-weight: 900; color: var(--accent); font-family: monospace; }
+  .stat-label { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  /* ステータスバー */
+  #statusBar { padding: 10px 16px; border-radius: 8px; font-size: 13px; margin-top: 16px; display: none; }
+  #statusBar.info    { background: #1e2a3a; border: 1px solid var(--accent2); color: var(--accent2); }
+  #statusBar.success { background: #1b2e1b; border: 1px solid var(--success); color: var(--success); }
+  #statusBar.error   { background: #2e1b1b; border: 1px solid var(--error);   color: var(--error); }
+  #statusBar.warn    { background: #2e2415; border: 1px solid var(--warn);    color: var(--warn); }
+
+  /* ================================================================
+     モーダル共通
+  ================================================================ */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 9999;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: #1a1a2e; border: 1px solid #6c63ff44;
+    border-radius: 16px; padding: 28px;
+    max-width: 540px; width: 92%; max-height: 88vh; overflow-y: auto;
+  }
+  .modal-box h3 { margin: 0 0 10px; color: #e0e0ff; font-size: 1.1em; }
+  .modal-box .modal-sub { color: #aaa; font-size: 0.85em; margin-bottom: 16px; line-height: 1.7; }
+  .modal-box textarea {
+    width: 100%; background: #0d0d1a; border: 1px solid #333;
+    border-radius: 8px; padding: 12px; color: #ddd;
+    font-size: 13px; resize: vertical; min-height: 80px;
+    font-family: 'Segoe UI', sans-serif; line-height: 1.6;
+  }
+  .modal-box textarea:focus { outline: none; border-color: #6c63ff88; }
+  .modal-btn-row { display: flex; gap: 10px; margin-top: 14px; justify-content: flex-end; }
+  .modal-btn {
+    padding: 8px 22px; border-radius: 6px; font-size: 14px;
+    font-weight: 600; cursor: pointer; border: none; transition: .2s;
+  }
+  .modal-btn-skip { background: #ffffff11; color: #aaa; border: 1px solid #ffffff22; }
+  .modal-btn-skip:hover { background: #ffffff22; }
+  .modal-btn-send { background: #6c63ff; color: #fff; }
+  .modal-btn-send:hover { background: #8a82ff; }
+  .modal-btn-send:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* 未対応モーダル専用 */
+  #unknownModal .warn-icon { font-size: 2em; margin-bottom: 8px; }
+  #unknownModal .detail-box {
+    background: #0d0d1a; border: 1px solid #333; border-radius: 6px;
+    padding: 10px 12px; font-size: 11px; color: #888;
+    font-family: monospace; margin-bottom: 14px; line-height: 1.6;
   }
 
-  body::before {
-    content : "";
-    position: fixed;
-    inset   : 0;
-    background:
-      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,229,255,0.03) 40px),
-      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,229,255,0.03) 40px);
-    pointer-events: none;
-    z-index: 0;
-  }
+  footer { text-align: center; padding: 32px; color: var(--text-dim); font-size: 12px; border-top: 1px solid var(--border); margin-top: 20px; }
 
-  .wrap { position: relative; z-index: 1; width: 100%; max-width: 720px; }
+  /* 2カラムレイアウト */
+  .layout { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; padding: 32px 20px; align-items: flex-start; }
+  .main-col { flex: 1; min-width: 0; }
+  .side-col { width: 280px; flex-shrink: 0; }
 
-  /* ── ヘッダー ── */
-  header { text-align: center; margin-bottom: 32px; }
-  .logo-line { margin-bottom: 8px; }
-  .logo-badge {
-    display: inline-block;
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    color: #fff; font-size: 10px; font-weight: 900;
-    letter-spacing: 3px; padding: 4px 12px; border-radius: 4px;
-    font-family: 'JetBrains Mono', monospace;
-  }
-  header h1 { font-size: 2.4em; font-weight: 900; letter-spacing: -1px; color: var(--text); }
-  header h1 span { color: var(--accent); }
-  .tagline { color: var(--text-dim); font-size: 13px; margin-top: 6px; letter-spacing: 1px; }
+  /* セキュリティパネル */
+  .sec-panel { background: #12101e; border: 1px solid #3a2a5a; border-radius: 12px; padding: 18px; position: sticky; top: 20px; }
+  .sec-panel .sec-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #c084fc; margin-bottom: 14px; }
+  .sec-panel .sec-title span { font-size: 18px; }
+  .sec-item { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #2a1a3a; }
+  .sec-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .sec-item .sec-tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 3px; display: inline-block; margin-bottom: 6px; }
+  .tag-warn    { background: #ff980022; color: #ff9800; border: 1px solid #ff980055; }
+  .tag-safe    { background: #4caf5022; color: #4caf50; border: 1px solid #4caf5055; }
+  .tag-info    { background: #4fc3f722; color: #4fc3f7; border: 1px solid #4fc3f755; }
+  .sec-item p  { font-size: 11.5px; color: #bbb; line-height: 1.7; }
+  .sec-item strong { color: #e0d0ff; }
+  .sec-item code { font-size: 10px; background: #1a0a2a; padding: 1px 5px; border-radius: 3px; color: #c084fc; font-family: monospace; }
+  .verified-badge { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 10px; color: #7b7f99; }
+  .verified-badge::before { content: "✔"; color: #4caf50; font-weight: 900; }
 
-  /* ── タブ ── */
-  .tabs {
-    display: flex; gap: 2px; margin-bottom: 20px;
-    border-bottom: 2px solid var(--border);
-  }
-  .tab-btn {
-    background: none; border: none; color: var(--text-dim);
-    padding: 12px 24px; font-size: 14px; font-weight: 700;
-    cursor: pointer; border-bottom: 3px solid transparent;
-    margin-bottom: -2px; transition: all 0.2s;
-    font-family: 'Zen Kaku Gothic New', sans-serif; letter-spacing: 1px;
-  }
-  .tab-btn:hover { color: var(--text); }
-  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
-
-  /* ── カード ── */
-  .card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 24px; margin-bottom: 16px;
-  }
-  .card-title {
-    font-size: 13px; font-weight: 700; letter-spacing: 2px;
-    color: var(--accent); text-transform: uppercase; margin-bottom: 16px;
-  }
-
-  /* ── ドロップゾーン ── */
-  .dropzone {
-    border: 2px dashed var(--border); border-radius: 10px;
-    padding: 32px 20px; text-align: center; cursor: pointer;
-    transition: all 0.3s; position: relative;
-  }
-  .dropzone input[type="file"] {
-    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
-  }
-  .dropzone:hover, .dropzone.drag-over {
-    border-color: var(--accent); background: rgba(0,229,255,0.04);
-  }
-  .drop-icon { font-size: 2.4em; margin-bottom: 10px; display: block; }
-  .drop-main { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
-  .drop-sub  { font-size: 12px; color: var(--text-dim); }
-
-  .file-list { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
-  .file-item {
+  /* 除外ファイルリスト [SEMIFIXED] */
+  #skipList { margin-top: 8px; }
+  .skip-item {
     display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; background: rgba(0,229,255,0.04);
-    border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 10px; background: #1a0f0f;
+    border: 1px solid #3a1a1a; border-radius: 6px;
+    margin-top: 6px; font-size: 11px; color: #888;
+    font-family: monospace;
   }
-  .file-item-info { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-  .file-badge {
-    font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
-    font-family: 'JetBrains Mono', monospace; white-space: nowrap;
-    background: rgba(0,229,255,0.12); color: var(--accent); border: 1px solid rgba(0,229,255,0.3);
-  }
-  .file-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .file-size { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: nowrap; margin-left: 8px; }
-  .file-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 2px 6px; flex-shrink: 0; }
-  .file-remove:hover { color: var(--error); }
+  .skip-item .skip-icon { color: #f44336; font-size: 12px; flex-shrink: 0; }
+  .skip-item .skip-name { flex: 1; word-break: break-all; }
+  .skip-item .skip-reason { font-size: 10px; color: #555; flex-shrink: 0; }
+  #skipPanel { display: none; }
+  #skipPanel h3 { font-size: 12px; color: #888; margin-bottom: 6px; padding-top: 4px; border-top: 1px solid #2d3148; }
 
-  /* ── サイズ設定 ── */
-  .size-control {
-    background: rgba(0,229,255,0.04); border: 1px solid var(--border);
-    border-radius: 10px; padding: 16px; margin-bottom: 12px;
-  }
-  .size-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-  .size-label { font-size: 13px; color: var(--text-dim); min-width: 110px; flex-shrink: 0; }
-  input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; height: 4px; }
-  .size-badge {
-    min-width: 60px; text-align: right;
-    font-size: 1.1em; font-weight: 700; color: var(--accent);
-    font-family: 'JetBrains Mono', monospace;
-  }
-  .size-note { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
-  .size-info { font-size: 12px; color: var(--success); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  /* 採用ファイルリスト（圧縮ボタン上） [SEMIFIXED] */
+  #adoptedList { margin-bottom: 12px; }
+  #adoptedList .adopted-empty { font-size: 12px; color: var(--text-dim); padding: 6px 0; }
+  #adoptedListWrap { display: none; }
+  #adoptedListWrap h3 { font-size: 12px; color: var(--accent2); margin-bottom: 6px; }
 
-  /* ── ボタン ── */
-  .btn {
-    display: block; width: 100%; padding: 14px; border: none; border-radius: 8px;
-    font-size: 15px; font-weight: 700; font-family: 'Zen Kaku Gothic New', sans-serif;
-    cursor: pointer; transition: all 0.2s; letter-spacing: 1px;
-  }
-  .btn-primary { background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #fff; }
-  .btn-primary:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
-  .btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
-  .btn-dl-all {
-    display: block; width: 100%; margin-top: 16px; padding: 13px;
-    background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.3);
-    color: var(--accent); border-radius: 8px;
-    font-size: 14px; font-weight: 700; font-family: 'Zen Kaku Gothic New', sans-serif;
-    cursor: pointer; transition: all 0.2s; letter-spacing: 1px;
-  }
-  .btn-dl-all:hover { background: rgba(0,229,255,0.15); }
-
-  /* ── プログレス ── */
-  .progress-wrap { display: none; margin-bottom: 14px; }
-  .progress-bar  { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); width: 0%; transition: width 0.4s; }
-  .progress-label { font-size: 12px; color: var(--text-dim); margin-top: 6px; text-align: center; font-family: 'JetBrains Mono', monospace; }
-
-  /* ── 結果 ── */
-  .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
-  .summary-box {
-    background: rgba(0,229,255,0.05); border: 1px solid rgba(0,229,255,0.15);
-    border-radius: 8px; padding: 14px; text-align: center;
-  }
-  .summary-val { font-size: 1.8em; font-weight: 900; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
-  .summary-lbl { font-size: 11px; color: var(--text-dim); margin-top: 4px; letter-spacing: 1px; }
-
-  .month-group  { margin-bottom: 14px; }
-  .month-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px; background: rgba(124,58,237,0.1);
-    border: 1px solid rgba(124,58,237,0.25); border-radius: 8px 8px 0 0;
-  }
-  .month-title  { font-weight: 700; color: var(--accent); font-size: 14px; }
-  .month-meta   { font-size: 11px; color: var(--text-dim); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
-  .month-dl {
-    background: rgba(124,58,237,0.2); border: 1px solid rgba(124,58,237,0.4);
-    color: var(--accent2); padding: 6px 14px; border-radius: 6px;
-    font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;
-    font-family: 'Zen Kaku Gothic New', sans-serif;
-  }
-  .month-dl:hover { background: rgba(124,58,237,0.35); }
-  .split-list { border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; }
-  .split-item {
-    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-    border-bottom: 1px solid var(--border); transition: background 0.15s;
-  }
-  .split-item:last-child { border-bottom: none; }
-  .split-item:hover { background: rgba(0,229,255,0.03); }
-  .split-name { flex: 1; font-size: 13px; font-family: 'JetBrains Mono', monospace; color: var(--text); word-break: break-all; }
-  .split-info { font-size: 11px; color: var(--text-dim); white-space: nowrap; font-family: 'JetBrains Mono', monospace; }
-  .split-dl {
-    background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.25);
-    color: var(--accent); padding: 5px 12px; border-radius: 6px;
-    font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap;
-    font-family: 'Zen Kaku Gothic New', sans-serif;
-  }
-  .split-dl:hover { background: rgba(0,229,255,0.18); }
-
-  .alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
-  .alert-warn { background: rgba(255,181,71,0.1); border: 1px solid rgba(255,181,71,0.3); color: var(--warn); }
-  .alert-err  { background: rgba(255,77,109,0.1); border: 1px solid rgba(255,77,109,0.3); color: var(--error); }
-
-  /* ── ツールカード（hrefリンク版）── */
-  .tool-card {
-    display: flex; align-items: center; gap: 16px; padding: 20px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; margin-bottom: 12px;
-    transition: all 0.25s; text-decoration: none; color: inherit;
-  }
-  .tool-card:hover {
-    border-color: var(--accent2);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(124,58,237,0.12);
-  }
-  .tool-icon { font-size: 2.4em; flex-shrink: 0; }
-  .tool-info { flex: 1; }
-  .tool-info h4 { font-size: 15px; font-weight: 700; margin-bottom: 5px; color: var(--text); }
-  .tool-info p  { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
-  /* URLテキスト表示 */
-  .tool-url {
-    font-size: 11px; font-family: 'JetBrains Mono', monospace;
-    color: var(--accent2); margin-top: 6px; word-break: break-all;
-  }
-  .tool-arrow { font-size: 1.4em; color: var(--accent2); flex-shrink: 0; }
-
-  .info-card { padding: 20px 24px; }
-  .info-card h3 { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: var(--accent2); text-transform: uppercase; margin-bottom: 14px; }
-  .info-card p  { font-size: 13px; color: var(--text-dim); line-height: 1.8; }
-  .info-card p + p { margin-top: 10px; }
-  .info-card strong { color: var(--text); }
-
-  /* ── フッター ── */
-  footer { margin-top: 48px; text-align: center; font-size: 11px; color: var(--text-dim); letter-spacing: 1px; line-height: 2; }
-
-  .toast {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: rgba(255,181,71,0.95); color: #000;
-    padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700;
-    z-index: 9999; opacity: 0; transition: opacity .3s;
-    pointer-events: none; white-space: nowrap;
-  }
-  .toast.show { opacity: 1; }
-
-  @media (max-width: 600px) {
-    body { padding: 20px 12px 60px; }
-    header h1 { font-size: 1.8em; }
-    .summary-grid { grid-template-columns: repeat(2, 1fr); }
-    .tab-btn { padding: 10px 14px; font-size: 12px; }
+  @media (max-width: 780px) {
+    .layout { flex-direction: column; }
+    .side-col { width: 100%; position: static; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <header>
-    <div class="logo-line"><span class="logo-badge">MDSC TOOLS</span></div>
-    <h1>JSON <span>Splitter</span></h1>
-    <p class="tagline">ChatGPT / Claude / Grok の会話JSONを月単位・サイズ別に分割</p>
-  </header>
+<header>
+  <div class="icon">🗜️</div>
+  <h1>MDSC</h1>
+  <span class="badge">v1.8</span>
+  <span style="color:var(--text-dim); font-size:13px; margin-left:8px;">AI対話履歴 意味密度圧縮ツール</span>
+</header>
 
-  <!-- タブ -->
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('split', this)">✂️ 分割ツール</button>
-    <button class="tab-btn" onclick="switchTab('tools', this)">🔗 ツール &amp; リンク</button>
+<div class="layout">
+
+<!-- 左サイド: セキュリティ情報パネル -->
+<aside class="side-col">
+  <div class="sec-panel">
+    <div class="sec-title"><span>🔐</span> セキュリティ情報</div>
+
+    <div class="sec-item">
+      <div class="sec-tag tag-warn">⚠️ Grokエクスポートについて</div>
+      <p>GrokのZIPには会話データ以外に<strong>個人情報ファイルが含まれます</strong>。</p>
+      <p style="margin-top:6px;">
+        <code>prod-mc-auth-mgmt-api.json</code><br>
+        → メールアドレス・IPアドレス・位置情報・XアカウントIDを含む
+      </p>
+      <p style="margin-top:6px;">
+        <code>prod-mc-billing.json</code><br>
+        → 課金・残高情報を含む
+      </p>
+      <div class="verified-badge">制作者が実ファイルを検証・確認済み (2026-03)</div>
+    </div>
+
+    <div class="sec-item">
+      <div class="sec-tag tag-safe">✅ このツールでの対策</div>
+      <p>上記ファイルは<strong>ファイル名で自動スキップ</strong>します。読み込まれることなく除外されるため、外部に送信されません。</p>
+      <p style="margin-top:6px; font-size:11px; color:#888;">
+        会話データ <code>prod-grok-backend.json</code> のみ処理対象です。
+      </p>
+    </div>
+
+    <div class="sec-item">
+      <div class="sec-tag tag-info">ℹ️ 安全な使い方</div>
+      <p>GrokのZIPを解凍した場合、フォルダごとD&amp;Dせず <code>prod-grok-backend.json</code> のみを選択することを推奨します。</p>
+    </div>
+
+    <div class="sec-item">
+      <div class="sec-tag tag-info">ℹ️ 通信について</div>
+      <p>個人情報ファイルは外部サーバーに送信されません。</p>
+    </div>
+
+  </div>
+</aside>
+
+<!-- 右メイン: 操作エリア -->
+<div class="main-col">
+
+  <div class="card">
+    <h2>① JSONファイルを読み込む</h2>
+    <div id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📂</div>
+      <p>クリックまたはドラッグ＆ドロップ</p>
+      <p style="margin-top:4px; font-size:12px;">ChatGPT / Claude / Grok の conversations.json（複数可・総量100MB推奨）</p>
+      <input type="file" id="fileInput" accept=".json" multiple onchange="addFiles(this.files)">
+    </div>
+    <div id="fileList"></div>
+
+    <!-- 除外ファイル一覧 [SEMIFIXED] スキップされたファイルをここに表示 -->
+    <div id="skipPanel">
+      <h3>⛔ 除外ファイル（圧縮対象外）</h3>
+      <div id="skipList"></div>
+    </div>
   </div>
 
-  <!-- ===== タブ1: 分割ツール ===== -->
-  <div id="tab-split" class="tab-content active">
+  <div class="card">
+    <h2>② 圧縮実行</h2>
 
-    <!-- アップロード -->
-    <div class="card">
-      <div class="card-title">📂 JSONファイルを読み込む</div>
-      <div class="dropzone" id="dropzone">
-        <input type="file" id="fileInput" accept=".json" multiple>
-        <span class="drop-icon">🗂️</span>
-        <div class="drop-main">クリックまたはドラッグ＆ドロップ</div>
-        <div class="drop-sub">ChatGPT / Claude / Grok の conversations.json　複数可</div>
-      </div>
-      <div class="file-list" id="fileList"></div>
+    <!-- 採用ファイル一覧（圧縮ボタン直上）[SEMIFIXED] -->
+    <!-- [CERTAIN] 合計サイズ警告バナー — renderFileListが制御 -->
+    <div id="sizewarnBanner" style="display:none; margin-bottom:10px; padding:10px 14px; border-radius:8px; font-size:13px; line-height:1.6;"></div>
+
+    <div id="adoptedListWrap">
+      <h3>✅ 圧縮対象ファイル</h3>
+      <div id="adoptedList"></div>
     </div>
 
-    <!-- 設定 -->
-    <div class="card">
-      <div class="card-title">⚙️ 分割サイズ設定</div>
-      <div class="size-control">
-        <div class="size-row">
-          <label class="size-label">分割サイズ上限</label>
-          <input type="range" id="sizeSlider" min="1" max="100" step="1" value="10" oninput="updateSlider()">
-          <span class="size-badge" id="sizeBadge">10 MB</span>
-        </div>
-        <div class="size-note">
-          最小 <strong>1MB</strong> ／ 標準 <strong style="color:var(--accent)">10MB</strong> ／ 最大 <strong style="color:var(--warn)">100MB</strong>
-          &nbsp;—&nbsp; MDSC処理推奨上限は 100MB
-        </div>
-      </div>
-      <div class="size-info">
-        ✅ ChatGPT / Claude / Grok 混在OK — フォーマット別に自動判別して出力
-      </div>
+    <button class="btn btn-primary" id="runBtn" disabled onclick="runCompress()">
+      🗜️ 圧縮開始
+    </button>
+    <div id="progressWrap">
+      <div class="progress-bar-bg"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+      <div class="progress-label" id="progressLabel">準備中...</div>
     </div>
+    <div id="statusBar"></div>
+  </div>
 
-    <!-- 実行 -->
-    <div class="card">
-      <div class="progress-wrap" id="progressWrap">
-        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-        <div class="progress-label" id="progressLabel">処理中...</div>
-      </div>
-      <button class="btn btn-primary" id="runBtn" disabled>✂️ 分割を実行する</button>
-    </div>
+  <div class="card" id="resultCard">
+    <h2>③ 結果</h2>
+    <div class="stat-grid" id="statGrid"></div>
+    <button class="btn btn-dl" onclick="downloadResult()">⬇️ MDファイルをダウンロード</button>
+  </div>
 
-    <!-- 結果 -->
-    <div class="card" id="resultCard" style="display:none;">
-      <div class="card-title">📦 分割結果</div>
-      <div id="resultContent"></div>
-    </div>
-
-    <!-- 分割完了後 → MDSCバナー（href別タブリンク） -->
-    <div id="mdscBannerSplit" style="display:none;">
-      <a class="tool-card"
-         href="https://ryoled2000-maker.github.io/chatgpt-claude-history-compressor/"
-         target="_blank" rel="noopener">
-        <div class="tool-icon">🔬</div>
-        <div class="tool-info">
-          <h4>分割完了！次は MDSC で圧縮する</h4>
-          <p>分割したJSONをMDSCにドロップして意味密度圧縮 — 特願2026-026882</p>
-          <div class="tool-url">ryoled2000-maker.github.io/chatgpt-claude-history-compressor/</div>
-        </div>
-        <div class="tool-arrow">→</div>
-      </a>
-    </div>
-
-  </div><!-- /tab-split -->
-
-  <!-- ===== タブ2: ツール & リンク ===== -->
-  <div id="tab-tools" class="tab-content">
-
-    <div class="card">
-      <div class="card-title">🔗 外部ツール</div>
-
-      <!-- MDSC 圧縮ツール（href別タブリンク） -->
-      <a class="tool-card"
-         href="https://ryoled2000-maker.github.io/chatgpt-claude-history-compressor/"
-         target="_blank" rel="noopener">
-        <div class="tool-icon">🔬</div>
-        <div class="tool-info">
-          <h4>MDSC — 意味密度圧縮ツール</h4>
-          <p>ChatGPT / Claude / Grok の履歴JSONを意味密度で圧縮。最大100MB対応。<br>特願2026-026882 / Engine v1.5</p>
-          <div class="tool-url">ryoled2000-maker.github.io/chatgpt-claude-history-compressor/</div>
-        </div>
-        <div class="tool-arrow">→</div>
-      </a>
-
-    </div>
-
-    <div class="card info-card">
-      <h3>ℹ️ JSON Splitter について</h3>
-      <p>MDSC の前処理ツールです。ChatGPT・Claude・Grok からエクスポートした大きなJSONを、月単位・サイズ別に自動分割します。</p>
-      <p>
-        <strong>複数ファイル同時処理対応</strong> — ChatGPT・Claude・Grok のJSONを同時に読み込めます。<br>
-        <strong>月別ZIPダウンロード</strong> — 月ごとにフォルダ分けしてZIP出力。<br>
-        <strong>レポートtxt同梱</strong> — 会話タイトル・日付の一覧を自動生成。
-      </p>
-      <p style="margin-top:14px;">
-        <strong>特許出願番号:</strong> 特願2026-026882<br>
-        <strong>Engine:</strong> MDSC v1.5
-      </p>
-    </div>
-
-  </div><!-- /tab-tools -->
-
-</div><!-- /wrap -->
+</div><!-- /main-col -->
+</div><!-- /layout -->
 
 <footer>
-  <p>MDSC JSON Splitter v1.5 | 特願2026-026882 | © 2026 RYO</p>
-  <p>
-    圧縮ツール:
-    <a href="https://ryoled2000-maker.github.io/chatgpt-claude-history-compressor/"
-       target="_blank" rel="noopener"
+  Powered by MDSC Technology — 特許出願中 © 2026 RYO<br>
+  <span style="font-size:11px; color: var(--text-dim);">
+    📂 大きなJSONは先に分割：
+    <a href="https://ryoled2000-maker.github.io/mdsc-json-splitter/" target="_blank"
        style="color:var(--accent2); text-decoration:none;">
-      ryoled2000-maker.github.io/chatgpt-claude-history-compressor/
+      ryoled2000-maker.github.io/mdsc-json-splitter/
     </a>
-  </p>
+  </span>
 </footer>
-<div class="toast" id="toast"></div>
+
+<!-- ================================================================
+     未対応フォーマット検出モーダル
+================================================================ -->
+<div class="modal-overlay" id="unknownModal">
+  <div class="modal-box">
+    <div class="warn-icon">⚠️</div>
+    <h3>未対応フォーマットを検出しました</h3>
+    <p class="modal-sub">
+      未対応のため対話内容をうまく圧縮できない恐れがあります。<br>
+      <span style="color:#6c63ff; font-size:0.9em;">構造情報は品質向上のため自動で開発者に送信しました。</span>
+    </p>
+    <div class="detail-box" id="unknownDetail"></div>
+    <p style="color:#c0c0e0; font-size:0.88em; margin-bottom:10px;">
+      品質向上のためご意見・ご感想があればぜひ書き込んでください。<br>
+      何のAIサービスか等、開発者に届きます（任意・送らなくてもOK）
+    </p>
+    <textarea id="unknownComment" placeholder="例: Gemini の会話データです。○○という構造になっています…（任意）"></textarea>
+    <div class="modal-btn-row">
+      <button class="modal-btn modal-btn-skip" onclick="closeUnknownModal(false)">スキップ</button>
+      <button class="modal-btn modal-btn-send" id="unknownSendBtn" onclick="sendUnknownComment()">送信する</button>
+    </div>
+  </div>
+</div>
 
 <script>
+"use strict";
 // ================================================================
-// JSON Splitter v1.5
-// 変更履歴:
-//   v1.5: Grok対応 (detectFormat / getTitle / getDate / ファイル名ラベル)
-//         SKIP_EXACTにGrok系メタファイル追加
-//         タブ2・分割完了バナーをhref別タブリンクに変更（openGAS廃止）
-//         mdscSafe判定を15MB→100MBに修正（CF上限合わせ）
-//   v1.4: 複数ファイル同時処理 / 月別ZIP / レポートtxt同梱
-// マーフィーガード:
-//   [CERTAIN] openGAS()関数は廃止。リンクはすべてhref+target="_blank"で完結
-//   [CERTAIN] GAS_URL変数なし（splitterはGAS統計送信を行わない）
-//   [CERTAIN] SKIP_EXACTはindex.htmlと独立管理（projects.jsonはsplitter側にも追加）
+// [CERTAIN] 設定
 // ================================================================
+const CF_URL     = "https://mdsc-gateway.ryoled2000.workers.dev";
+const GAS_URL    = "https://script.google.com/macros/s/AKfycbyG6sh-ONqhfhdN3cL-rofsxfWSaGtNrNonRFDcblNZxpnv64djUJoX5suRJgvIiCaF/exec"; // [CERTAIN] v1.1再デプロイ後の正式URL
+const APP_VER    = "1.10";
 
-// ── スライダー ──
-function updateSlider() {
-  var v = parseInt(document.getElementById("sizeSlider").value);
-  var badge = document.getElementById("sizeBadge");
-  badge.textContent = v + " MB";
-  badge.style.color = v > 75 ? "var(--warn)" : "var(--accent)";
+// ================================================================
+// [CERTAIN] スキップファイル定義
+// マーフィーガード: projects.json を明示追加（splitterとの差異）
+// ================================================================
+// [CERTAIN] マーフィーガード: Grok個人情報ファイルをファイル名で確実に弾く
+// prod-mc-auth-mgmt-api.json → メアド・IP・位置情報・XアカウントID含む（制作者実ファイル検証済み）
+// prod-mc-billing.json       → 課金・残高情報含む（制作者実ファイル検証済み）
+const SKIP_EXACT  = [
+  "user.json","users.json","shared_conversations.json",
+  "sora.json","memories.json","projects.json",
+  "prod-mc-auth-mgmt-api.json","prod-mc-billing.json",
+];
+const SKIP_PREFIX = ["file_0000"];
+
+function shouldSkipFile(fn) {
+  fn = fn.toLowerCase();
+  if (SKIP_EXACT.includes(fn)) return true;
+  if (SKIP_PREFIX.some(p => fn.startsWith(p))) return true;
+  return false;
 }
 
-// ── タブ切替 ──
-function switchTab(name, btn) {
-  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-  document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
-  btn.classList.add('active');
-  document.getElementById('tab-' + name).classList.add('active');
+// ================================================================
+// [CERTAIN] 汎用対話検出エンジン（v1.8新機能）
+// マーフィーガード: ゲームNPC等の誤検知リスクあり → roleHits/textHits≥2で閾値
+// ================================================================
+const ROLE_KEYS = ["role","sender","author","from","by"];
+const ROLE_VALS = ["user","human","assistant","bot","ai","system","model"];
+const TEXT_KEYS = ["content","text","message","parts","body","value"];
+
+function scanForConversation(data) {
+  let roleHits = 0, textHits = 0;
+  function scan(obj, depth) {
+    if (depth > 8) return;
+    if (Array.isArray(obj)) { obj.slice(0,20).forEach(x => scan(x, depth+1)); }
+    else if (obj && typeof obj === "object") {
+      for (const [k, v] of Object.entries(obj)) {
+        if (ROLE_KEYS.includes(k.toLowerCase())) {
+          if (ROLE_VALS.some(r => String(v).toLowerCase().includes(r))) roleHits++;
+        }
+        if (TEXT_KEYS.includes(k.toLowerCase())) {
+          if (typeof v === "string" && v.length > 10) textHits++;
+          if (Array.isArray(v) && v.some(x => typeof x === "string")) textHits++;
+        }
+        scan(v, depth+1);
+      }
+    }
+  }
+  scan(data, 0);
+  return { detected: roleHits >= 2 && textHits >= 2, roleHits, textHits };
+}
+
+// ================================================================
+// [CERTAIN] フォーマット判定
+// マーフィーガード: 判定順序厳守
+//   1. Grok（トップがオブジェクト + conversationsキー）
+//   2. ChatGPT（mapping / gizmo_id）
+//   3. Claude（chat_messages）
+//   4. 既知スキップ
+//   5. 汎用対話検出
+// ================================================================
+function detectFormat(data) {
+  // [1] Grok: トップレベルがオブジェクト + conversationsキー + responsesキー
+  if (!Array.isArray(data) && typeof data === "object" && "conversations" in data) {
+    const convs = data.conversations;
+    if (Array.isArray(convs) && convs.length > 0 && convs[0] && "responses" in convs[0]) {
+      return { fmt: "grok", scan: null };
+    }
+  }
+
+  // [2][3] ChatGPT / Claude: トップが配列
+  const first = Array.isArray(data) ? data[0] : data;
+  if (first && typeof first === "object") {
+    if ("mapping" in first || "gizmo_id" in first) return { fmt: "chatgpt", scan: null };
+    if ("chat_messages" in first)                   return { fmt: "claude",  scan: null };
+    if ("docs" in first && "prompt_template" in first) return { fmt: "skip", scan: null };
+    if ("conversations_memory" in first)               return { fmt: "skip", scan: null };
+  }
+
+  // [4] 汎用対話検出
+  const scan = scanForConversation(data);
+  if (scan.detected) {
+    // トップレベルキーを記録（通報用）
+    const topKeys = typeof data === "object" && data !== null
+      ? Object.keys(data).slice(0,10).join(", ")
+      : "N/A";
+    return { fmt: "generic", scan: { ...scan, topKeys } };
+  }
+
+  return { fmt: "skip", scan: null };
 }
 
 // ================================================================
 // ファイル管理
 // ================================================================
-function utf8ByteSize(str) {
-  var s = 0;
-  for (var i = 0; i < str.length; i++) {
-    var c = str.charCodeAt(i);
-    if (c < 0x80) s += 1;
-    else if (c < 0x800) s += 2;
-    else if (c < 0xD800 || c >= 0xE000) s += 3;
-    else { i++; s += 4; }
+// [LOCKED] 以下5変数はシステム全体の状態管理の核心。変更・改名禁止
+let fileMap = {}, fileSeq = 0, allResults = [];
+
+// 未対応モーダル用の pending キュー（複数ファイル対応）
+// [LOCKED] skipLog: 除外ファイル履歴。addFilesが追記、renderFileListが参照
+let skipLog        = [];
+let unknownQueue   = [];
+let unknownCurrent = null;
+
+const dropzone = document.getElementById("dropzone");
+dropzone.addEventListener("dragover",  e => { e.preventDefault(); dropzone.classList.add("drag-over"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag-over"));
+dropzone.addEventListener("drop", e => { e.preventDefault(); dropzone.classList.remove("drag-over"); addFiles(e.dataTransfer.files); });
+
+// [LOCKED] addFiles: fileMap への追加 / skipLog への追記 の振り分けロジック
+//          fileMap → 圧縮対象（採用）
+//          skipLog → 除外理由付きで右パネルに表示
+// [SEMIFIXED] skipLog.push の reason 文言は自由に変更可
+// [FREE] アイコン・setStatus のメッセージ
+async function addFiles(files) {
+  // [CERTAIN] inputのvalueをリセットしないと同ファイル再選択が無視される
+  try { document.getElementById("fileInput").value = ""; } catch(e) {}
+
+  for (const f of files) {
+    if (!f.name.toLowerCase().endsWith(".json")) {
+      skipLog.push({ name: f.name, reason: "JSON以外" });
+      continue;
+    }
+    if (shouldSkipFile(f.name)) {
+      skipLog.push({ name: f.name, reason: "個人情報/非会話ファイル" });
+      continue;
+    }
+    const { fmt, scan } = await sniffFormat(f);
+
+    if (fmt === "generic") {
+      unknownQueue.push({ file: f, scan });
+      processUnknownQueue();
+      continue;
+    }
+    if (fmt === "skip") {
+      skipLog.push({ name: f.name, reason: "非対話JSON" });
+      continue;
+    }
+
+    // [LOCKED] fileMap への追加（採用）
+    const id = "f" + (++fileSeq);
+    fileMap[id] = { file: f, fmt };
   }
-  return s;
-}
-
-var fileMap = {};
-var fileSeq = 0;
-var splitResult = [];
-var skipLog = [];
-
-document.getElementById("fileInput").addEventListener("change", function(e) {
-  addFiles(e.target.files); e.target.value = "";
-});
-
-var dz = document.getElementById("dropzone");
-dz.addEventListener("dragover", function(e) { e.preventDefault(); dz.classList.add("drag-over"); });
-dz.addEventListener("dragleave", function(e) { if (!dz.contains(e.relatedTarget)) dz.classList.remove("drag-over"); });
-dz.addEventListener("drop", function(e) {
-  e.preventDefault(); dz.classList.remove("drag-over"); addFiles(e.dataTransfer.files);
-});
-
-function addFiles(list) {
-  var duplicates = [];
-  for (var i = 0; i < list.length; i++) {
-    var f = list[i];
-    if (!f.name.toLowerCase().endsWith(".json")) { alert(f.name + " はJSONファイルではありません。スキップします。"); continue; }
-    var dedupKey = f.name + "_" + f.size;
-    if (fileMap[dedupKey]) { duplicates.push(f.name); continue; }
-    fileMap[dedupKey] = f;
-  }
-  if (duplicates.length) showToast("⚠️ 既に追加済みのファイルをスキップしました: " + duplicates.join("、"));
   renderFileList();
 }
 
+// 未対応ファイルのキュー処理（1個ずつモーダル）
+function processUnknownQueue() {
+  if (unknownCurrent || !unknownQueue.length) return;
+  unknownCurrent = unknownQueue.shift();
+  showUnknownModal(unknownCurrent);
+}
+
+function sniffFormat(file) {
+  // [CERTAIN] マーフィーガード:
+  // 先頭50KB判定はGrokの大ファイルでconversationsキーが見えずskipになるバグあり
+  // → 50KBで高速判定 → skipならフォールバックで全読み再判定
+  function tryParse(raw) {
+    try {
+      let text = raw;
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      return detectFormat(JSON.parse(text));
+    } catch { return null; }
+  }
+  return new Promise(resolve => {
+    const r1 = new FileReader();
+    r1.onload = e => {
+      const result = tryParse(e.target.result);
+      if (result && result.fmt !== "skip") { resolve(result); return; }
+      // skipだった → 全読みで再判定
+      const r2 = new FileReader();
+      r2.onload = e2 => resolve(tryParse(e2.target.result) || { fmt: "skip", scan: null });
+      r2.onerror = () => resolve({ fmt: "skip", scan: null });
+      r2.readAsText(file, "utf-8");
+    };
+    r1.onerror = () => resolve({ fmt: "skip", scan: null });
+    r1.readAsText(file.slice(0, 50000), "utf-8");
+  });
+}
+
+// [LOCKED] fileMap の構造・id採番は変更禁止（runCompress と連動）
 function removeFile(id) { delete fileMap[id]; renderFileList(); }
 
+// [SEMIFIXED] FMT_LABELのキーはdetectFormatの戻り値と一致が必須
+//             テキスト・色は自由に変更可
+const FMT_LABEL = {
+  chatgpt: { text: "ChatGPT", cls: "badge-chatgpt" },
+  claude:  { text: "Claude",  cls: "badge-claude"  },
+  grok:    { text: "Grok",    cls: "badge-grok"    },
+  generic: { text: "未対応",  cls: "badge-generic" },
+  skip:    { text: "SKIP",    cls: "badge-skip"    },
+};
+
+// [SEMIFIXED] renderFileList: 採用リスト / 除外リスト の2エリアに分けて表示
+//             採用: fileMap に入ったもの（圧縮ボタン直上）
+//             除外: skipLog に積まれたもの（ドロップゾーン下）
 function renderFileList() {
-  var list = document.getElementById("fileList");
-  var ids  = Object.keys(fileMap);
-  if (!ids.length) { list.innerHTML = ""; document.getElementById("runBtn").disabled = true; return; }
-  var html = "";
-  ids.forEach(function(id) {
-    var f  = fileMap[id];
-    var mb = (f.size / 1024 / 1024).toFixed(2);
-    html += '<div class="file-item">'
-      + '<div class="file-item-info"><span class="file-badge">JSON</span>'
-      + '<span class="file-name">' + escHtml(f.name) + '</span></div>'
-      + '<span class="file-size">' + mb + ' MB</span>'
-      + '<button class="file-remove" onclick="removeFile(\'' + id + '\')">✕</button></div>';
-  });
-  list.innerHTML = html;
-  document.getElementById("runBtn").disabled = false;
+  const ids = Object.keys(fileMap);
+
+  // 採用リスト
+  const adoptedWrap = document.getElementById("adoptedListWrap");
+  const adoptedList = document.getElementById("adoptedList");
+  if (ids.length === 0) {
+    adoptedWrap.style.display = "none";
+    adoptedList.innerHTML = "";
+  } else {
+    adoptedWrap.style.display = "block";
+    adoptedList.innerHTML = ids.map(id => {
+      const { file: f, fmt } = fileMap[id];
+      const mb  = (f.size / 1024 / 1024).toFixed(2);
+      const lbl = FMT_LABEL[fmt] || FMT_LABEL.generic;
+      return `<div class="file-item">
+        <span class="badge-fmt ${lbl.cls}">${lbl.text}</span>
+        <span class="name">📄 ${esc(f.name)}</span>
+        <span class="size">${mb} MB</span>
+        <button class="remove" onclick="removeFile('${id}')">✕</button>
+      </div>`;
+    }).join("");
+  }
+
+  // 除外リスト
+  const skipPanel = document.getElementById("skipPanel");
+  const skipList  = document.getElementById("skipList");
+  if (skipLog.length === 0) {
+    skipPanel.style.display = "none";
+    skipList.innerHTML = "";
+  } else {
+    skipPanel.style.display = "block";
+    skipList.innerHTML = skipLog.map(s =>
+      `<div class="skip-item">
+        <span class="skip-icon">⛔</span>
+        <span class="skip-name">${esc(s.name)}</span>
+        <span class="skip-reason">${esc(s.reason)}</span>
+      </div>`
+    ).join("");
+  }
+
+  // [LOCKED] 圧縮ボタンの有効/無効は採用ファイル数で決まる（容量では無効化しない）
+  document.getElementById("runBtn").disabled = ids.length === 0;
+
+  // [CERTAIN] 合計サイズ警告バナー
+  // 100〜110MB: ⚠️ 警告のみ / 110MB超: 🚫 強い警告（ボタンは押せる）
+  const totalBytes = ids.reduce((s, id) => s + fileMap[id].file.size, 0);
+  const totalMB    = totalBytes / 1024 / 1024;
+  const warnBanner = document.getElementById("sizewarnBanner");
+  if (warnBanner) {
+    if (totalMB > 110) {
+      warnBanner.style.display = "block";
+      warnBanner.className = "status-bar error";
+      warnBanner.innerHTML = `🚫 合計 ${totalMB.toFixed(1)}MB — 安全域は100MBですが、<br>実測では約150MB級の処理成功例があります。<br>150MB超からは不安定になりやすく、環境や通信状況によっては失敗する場合があります。<br>200MB級では失敗確認もあるため、失敗した場合は  <a href="https://ryoled2000-maker.github.io/mdsc-json-splitter/" target="_blank" style="color:inherit;font-weight:700;">JSON分割ツール</a> で100MB以下に分割してください。`;
+    } else if (totalMB > 100) {
+      warnBanner.style.display = "block";
+      warnBanner.className = "status-bar warn";
+      warnBanner.innerHTML = `⚠️ 合計 ${totalMB.toFixed(1)}MB — 処理に時間がかかる場合があります（推奨上限: 100MB）。`;
+    } else {
+      warnBanner.style.display = "none";
+      warnBanner.innerHTML = "";
+    }
+  }
 }
 
-// ── 実行 ──
-document.getElementById("runBtn").addEventListener("click", function() {
-  var ids = Object.keys(fileMap);
+function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+// ================================================================
+// 未対応モーダル
+// ================================================================
+function showUnknownModal(item) {
+  const scan = item.scan || {};
+  document.getElementById("unknownDetail").textContent =
+    `ファイル: ${item.file.name}\n` +
+    `ロール検出数: ${scan.roleHits || 0}  テキスト検出数: ${scan.textHits || 0}\n` +
+    `トップレベルキー: ${scan.topKeys || "不明"}`;
+  document.getElementById("unknownComment").value = "";
+  document.getElementById("unknownSendBtn").disabled = false;
+  document.getElementById("unknownModal").classList.add("show");
+
+  // [CERTAIN] 構造情報を自動送信（ユーザー操作不要）
+  autoReportUnknown(item);
+}
+
+function closeUnknownModal(addToList) {
+  document.getElementById("unknownModal").classList.remove("show");
+  if (addToList && unknownCurrent) {
+    // genericとして一覧に追加して処理続行
+    const id = "f" + (++fileSeq);
+    fileMap[id] = { file: unknownCurrent.file, fmt: "generic" };
+    renderFileList();
+  }
+  unknownCurrent = null;
+  // 次のキューを処理
+  setTimeout(processUnknownQueue, 200);
+}
+
+async function sendUnknownComment() {
+  const comment = document.getElementById("unknownComment").value.trim();
+  const btn = document.getElementById("unknownSendBtn");
+  btn.disabled = true;
+  btn.textContent = "送信中...";
+
+  try {
+    const payload = {
+      type:     "unknown_comment",
+      filename: unknownCurrent?.file?.name || "",
+      comment,
+      version:  APP_VER,
+      timestamp: new Date().toISOString(),
+    };
+    // GASのフィードバックシートに送信
+    await fetch(GAS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "json=" + encodeURIComponent(JSON.stringify(payload)),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch(e) { /* 送信失敗は無視 */ }
+
+  btn.textContent = "✅ 送信しました";
+  setTimeout(() => closeUnknownModal(true), 1000);
+}
+
+// 構造情報を自動送信（ユーザー操作不要）
+async function autoReportUnknown(item) {
+  try {
+    const scan = item.scan || {};
+    const payload = {
+      type:      "unknown_auto",
+      filename:  item.file.name,
+      topKeys:   scan.topKeys || "",
+      roleHits:  scan.roleHits || 0,
+      textHits:  scan.textHits || 0,
+      version:   APP_VER,
+      timestamp: new Date().toISOString(),
+    };
+    await fetch(GAS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "json=" + encodeURIComponent(JSON.stringify(payload)),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch(e) { /* 自動送信失敗は無視 */ }
+}
+
+// ================================================================
+// 圧縮実行
+// ================================================================
+async function runCompress() {
+  const ids = Object.keys(fileMap);
   if (!ids.length) return;
+
   document.getElementById("runBtn").disabled = true;
   document.getElementById("resultCard").style.display = "none";
-  document.getElementById("mdscBannerSplit").style.display = "none";
-  splitResult = []; skipLog = [];
-  readAllFiles(ids, 0, []);
-});
+  allResults = [];
 
-function readAllFiles(ids, index, allConvs) {
-  if (index >= ids.length) { setProgress(true, "分割処理中...", 60); setTimeout(function() { doSplit(allConvs); }, 50); return; }
-  var pct = Math.round((index / ids.length) * 50) + 5;
-  setProgress(true, "読み込み中 " + (index+1) + "/" + ids.length, pct);
-  var f = fileMap[ids[index]];
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      var raw = e.target.result;
-      if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
-      var skipReason = shouldSkipFile(f.name);
-      if (skipReason) { skipLog.push({ filename: f.name, reason: skipReason }); readAllFiles(ids, index + 1, allConvs); return; }
-      var data = JSON.parse(raw);
-      var list = Array.isArray(data) ? data : [data];
-      var fmt  = detectFormat(list);
-      if (fmt === "skip") { skipLog.push({ filename: f.name, reason: "対話データなし（フォーマット判定によりスキップ）" }); readAllFiles(ids, index + 1, allConvs); return; }
-      list.forEach(function(conv) { allConvs.push({ conv: conv, fmt: fmt }); });
-    } catch(err) { skipLog.push({ filename: f.name, reason: "JSONパースエラー: " + err.message }); }
-    readAllFiles(ids, index + 1, allConvs);
-  };
-  reader.onerror = function() { alert(f.name + " の読み込みに失敗しました。"); readAllFiles(ids, index + 1, allConvs); };
-  reader.readAsText(f, "utf-8");
-}
+  const chunkMaxBytes = 10 * 1024 * 1024; // [CERTAIN] 10MB固定
+  const sessionId     = "sess_" + Date.now();
 
-// ── スキップ判定 ──
-// [CERTAIN] Grok系メタファイル追加。対話データはconversations.jsonのみ
-var SKIP_EXACT = [
-  "user.json", "users.json", "shared_conversations.json", "sora.json", "memories.json",
-  "projects.json",
-  "prod-grok-backend.json", "prod-mc-auth-mgmt-api.json",
-  "prod-mc-billing.json", "prod-mc-teams-api.json"
-];
-var SKIP_PREFIX = ["file_0000"];
-
-function shouldSkipFile(filename) {
-  var fn = filename.toLowerCase();
-  if (SKIP_EXACT.indexOf(fn) !== -1) return "対話データなし（メタ情報のみ）";
-  for (var i = 0; i < SKIP_PREFIX.length; i++) { if (fn.startsWith(SKIP_PREFIX[i])) return "システムファイル"; }
-  return null;
-}
-
-// ── フォーマット判定 ──
-// [CERTAIN] Grok: responses[]配列を持つ。ChatGPT/Claude/汎用と排他判定
-function detectFormat(list) {
-  if (!list || !list.length) return "skip";
-  var first = list[0];
-  if (!first || typeof first !== "object") return "skip";
-  if ("mapping" in first || "gizmo_id" in first) return "chatgpt";
-  if ("chat_messages" in first) return "claude";
-  if (Array.isArray(first.responses) && first.responses.length > 0) return "grok";
-  if ("docs" in first && "prompt_template" in first) return "skip";
-  if ("conversations_memory" in first) return "skip";
-  if (Array.isArray(first.messages) && first.messages.length > 0) return "generic_chat";
-  return "skip";
-}
-
-// ── タイトル・日付取得 ──
-function getTitle(conv, fmt) {
-  if (fmt === "chatgpt") return (conv.title || conv.name || "（タイトルなし）").replace(/\n/g, " ").trim().slice(0, 60);
-  if (fmt === "claude") {
-    var t = (conv.name || "").trim();
-    if (!t && conv.chat_messages) { for (var i = 0; i < conv.chat_messages.length; i++) { var m = conv.chat_messages[i]; if (m.sender === "human") { t = (m.text || "").trim().slice(0, 60); break; } } }
-    return t || "（タイトルなし）";
-  }
-  if (fmt === "grok") return (conv.title || conv.name || "（Grok会話）").toString().replace(/\n/g, " ").trim().slice(0, 60);
-  return (conv.title || conv.name || "（汎用会話）").toString().slice(0, 60);
-}
-
-function getDate(conv, fmt) {
+  // ウォームアップ
+  setStatus("info", "🔥 サーバーをウォームアップ中...");
+  setProgress(true, "接続確認中...", 5);
   try {
-    if (fmt === "chatgpt") { var ts = conv.create_time; return ts ? new Date(ts * 1000) : null; }
-    if (fmt === "claude")  { var s = conv.created_at || ""; return s ? new Date(s) : null; }
-    if (fmt === "grok")    {
-      if (conv.create_time) return new Date(conv.create_time * 1000);
-      if (conv.created_at)  return new Date(conv.created_at);
+    await fetch(`${CF_URL}/ping`, { signal: AbortSignal.timeout(35000) });
+    setStatus("info", "✅ サーバー接続確認 — 処理開始");
+  } catch {
+    setStatus("warn", "⚠️ ウォームアップに時間がかかっています。続行します...");
+  }
+
+  // 全ファイル読み込み → チャンク分割
+  // マーフィーガード: skip/genericはここで二重チェック
+  let allChunks = [];
+  for (const id of ids) {
+    const { file: f, fmt } = fileMap[id];
+    if (fmt === "skip") continue;
+    const text   = await readFile(f);
+    const chunks = splitIntoChunks(text, chunkMaxBytes);
+    allChunks.push(...chunks.map((c, i) => ({
+      text: c, filename: f.name, fmt,
+      index: i, total: chunks.length,
+    })));
+  }
+
+  const total = allChunks.length;
+
+  // チャンクを順番に送信
+  for (let i = 0; i < total; i++) {
+    const chunk = allChunks[i];
+    setProgress(true, `処理中 chunk ${i+1}/${total} (${chunk.filename})...`, Math.round(10 + (i/total)*80));
+    await idbSave(`chunk_${sessionId}_${i}`, { status: "sending", filename: chunk.filename });
+
+    try {
+      const res = await fetch(`${CF_URL}/compress`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          json:         chunk.text,
+          filename:     chunk.filename,
+          format:       chunk.fmt,       // [CERTAIN] v1.8: genericも送信
+          chunk_index:  i,
+          total_chunks: total,
+          session_id:   sessionId,
+        }),
+        signal: AbortSignal.timeout(180000),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "圧縮失敗");
+
+      allResults.push(data);
+      await idbSave(`chunk_${sessionId}_${i}`, { status: "done", result: data.markdown });
+      setStatus("info", `✅ chunk ${i+1}/${total} 完了 (圧縮率 ${data.stats?.compression_rate}%)`);
+
+    } catch(e) {
+      // [CERTAIN] 失敗時: 合計サイズが100MB超なら分割ツールURLを案内
+      const totalBytes = Object.keys(fileMap).reduce((s, id) => s + fileMap[id].file.size, 0);
+      const totalMB    = totalBytes / 1024 / 1024;
+      const splitHint  = totalMB > 100
+        ? `<br>📂 ファイルが大きすぎる可能性があります。<a href="https://ryoled2000-maker.github.io/mdsc-json-splitter/" target="_blank" style="color:inherit;font-weight:700;text-decoration:underline;">JSON分割ツール</a> で100MB以下に分割してから再試行してください。`
+        : "";
+      document.getElementById("statusBar").innerHTML =
+        `❌ chunk ${i+1} 失敗: ${e.message}${splitHint}`;
+      document.getElementById("statusBar").style.display = "block";
+      document.getElementById("statusBar").className = "error";
+      document.getElementById("runBtn").disabled = false;
+      setProgress(false);
+      return;
     }
-  } catch(e) {}
-  return null;
-}
+  }
 
-function toMonthKey(date) {
-  if (!date || isNaN(date.getTime())) return "0000-00";
-  return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0");
-}
-
-// ── 分割メイン ──
-function doSplit(allConvs) {
-  var maxBytes = parseInt(document.getElementById("sizeSlider").value) * 1024 * 1024;
-  var groups = {};
-  allConvs.forEach(function(item) {
-    var key = item.fmt || "unknown";
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(item);
-  });
-  splitResult = [];
-
-  Object.keys(groups).forEach(function(fmtKey) {
-    var items = groups[fmtKey];
-    var byMonth = {};
-    items.forEach(function(item) {
-      var mk = toMonthKey(getDate(item.conv, item.fmt));
-      if (!byMonth[mk]) byMonth[mk] = [];
-      byMonth[mk].push(item);
-    });
-
-    Object.keys(byMonth).sort().forEach(function(monthKey) {
-      var convs = byMonth[monthKey];
-      var parts = [], current = [], currentSize = 0, oversizeCount = 0;
-
-      convs.forEach(function(item) {
-        var singleArr = JSON.stringify([item.conv], null, 2);
-        var s = utf8ByteSize(singleArr);
-        if (s > maxBytes) oversizeCount++;
-        var addSize = current.length === 0 ? s : s - 2;
-        if (currentSize + addSize > maxBytes && current.length > 0) { parts.push(current); current = []; currentSize = 0; addSize = s; }
-        current.push(item.conv); currentSize += addSize;
-      });
-      if (current.length > 0) parts.push(current);
-
-      parts.forEach(function(partConvs, pi) {
-        var partNo   = parts.length > 1 ? (pi + 1) : 0;
-        var srcLabel = fmtKey === "chatgpt" ? "chatgpt" : fmtKey === "claude" ? "claude" : fmtKey === "grok" ? "grok" : "unknown";
-        var fname    = monthKey + "_" + srcLabel + (partNo ? "_part" + partNo : "") + "_conversations.json";
-        var sizeMB   = (utf8ByteSize(JSON.stringify(partConvs, null, 2)) / 1024 / 1024).toFixed(2);
-        var convTitles = partConvs.map(function(c) {
-          var d = getDate(c, fmtKey);
-          return { title: getTitle(c, fmtKey), date: d ? d.toISOString().slice(0,10) : "不明", id: c.id || c.uuid || c.conversation_id || "" };
-        });
-        splitResult.push({
-          monthKey: monthKey, source: srcLabel, partNo: partNo,
-          convCount: partConvs.length, sizeMB: sizeMB, filename: fname,
-          data: partConvs, titles: convTitles,
-          oversizeWarn: oversizeCount > 0,
-          mdscSafe: parseFloat(sizeMB) <= 100  // [CERTAIN] 100MB = CF上限合わせ
-        });
-      });
-    });
-  });
-
-  setProgress(false, "", 0);
+  setProgress(true, "全chunk統合中...", 95);
+  mergeResults(allResults);
+  setProgress(false);
+  setStatus("success", `🎉 完了！ ${total}チャンクを処理しました`);
   document.getElementById("runBtn").disabled = false;
-  renderResult();
 }
 
-// ── 結果表示 ──
-function renderResult() {
-  var card = document.getElementById("resultCard");
-  var cont = document.getElementById("resultContent");
-  card.style.display = "block";
+// ================================================================
+// チャンク分割
+// マーフィーガード:
+//   - Grokはトップがオブジェクト → そのまま1チャンク
+//   - ChatGPT/Claudeは配列 → 会話単位で分割
+//   - 1件がchunkMaxBytesを超えても強制通過
+// ================================================================
+function splitIntoChunks(text, maxBytes) {
+  if (new Blob([text]).size <= maxBytes) return [text];
+  try {
+    const data = JSON.parse(text);
+    if (!Array.isArray(data) && typeof data === "object" && "conversations" in data) return [text];
+    if (!Array.isArray(data)) return [text];
 
-  if (!splitResult.length) {
-    cont.innerHTML = '<div class="alert alert-err">❌ 分割できるデータがありませんでした。</div>';
-    card.scrollIntoView({ behavior: "smooth" }); return;
+    const chunks = [];
+    let current = [], currentSize = 0;
+    for (const item of data) {
+      const itemSize = new Blob([JSON.stringify(item)]).size;
+      if (currentSize + itemSize > maxBytes && current.length > 0) {
+        chunks.push(JSON.stringify(current));
+        current = []; currentSize = 0;
+      }
+      current.push(item); currentSize += itemSize;
+    }
+    if (current.length > 0) chunks.push(JSON.stringify(current));
+    return chunks;
+  } catch {
+    const len = Math.floor(maxBytes / 3);
+    const chunks = [];
+    for (let i = 0; i < text.length; i += len) chunks.push(text.slice(i, i + len));
+    return chunks;
   }
+}
 
-  var totalFiles = splitResult.length;
-  var totalConvs = splitResult.reduce(function(a,x){ return a + x.convCount; }, 0);
-  var months     = Array.from(new Set(splitResult.map(function(x){ return x.monthKey; }))).length;
+// ================================================================
+// 結果統合・DL
+// ================================================================
+let mergedMarkdown = "";
 
-  var html = '<div class="summary-grid">'
-    + summaryBox(totalFiles, "生成ファイル数")
-    + summaryBox(totalConvs.toLocaleString(), "総会話数")
-    + summaryBox(months, "月数") + '</div>';
+function mergeResults(results) {
+  mergedMarkdown = results.map(r => r.markdown || "").join("\n\n---\n\n");
+  const totalIn  = results.reduce((s,r) => s + (r.stats?.input_chars  || 0), 0);
+  const totalOut = results.reduce((s,r) => s + (r.stats?.output_chars || 0), 0);
+  const rate     = totalIn > 0 ? ((1 - totalOut/totalIn)*100).toFixed(1) : "0.0";
+  const convs    = results.reduce((s,r) => s + (r.stats?.conversation_count || 0), 0);
+  const elapsed  = results.reduce((s,r) => s + parseFloat(r.stats?.elapsed_sec || 0), 0).toFixed(1);
 
-  if (skipLog.length > 0) {
-    html += '<div class="alert alert-warn">⏭️ スキップ: ' + skipLog.map(function(s){ return escHtml(s.filename); }).join("、") + '</div>';
+  document.getElementById("resultCard").style.display = "block";
+  document.getElementById("statGrid").innerHTML = [
+    { val: rate+"%", label:"圧縮率" }, { val: convs, label:"会話数" },
+    { val: toMB(totalIn), label:"元サイズ" }, { val: toKB(totalOut), label:"圧縮後" },
+    { val: elapsed+"秒", label:"処理時間" }, { val: results.length+"個", label:"チャンク数" },
+  ].map(s => `<div class="stat-box"><div class="stat-val">${s.val}</div><div class="stat-label">${s.label}</div></div>`).join("");
+
+  // [CERTAIN] チャンクごとの統計をGASへ fire-and-forget 送信
+  // [CERTAIN] 送信失敗は完全に無視 — 圧縮結果・UI表示は一切影響を受けない
+  // GASのdoPostは { stats: {...} } 形式で受け取る（_basicRowが item.stats || item で処理）
+  for (const r of results) {
+    if (!r.stats) continue;
+    (async () => {
+      try {
+        await fetch(GAS_URL, {
+          method:  "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body:    "json=" + encodeURIComponent(JSON.stringify({ stats: r.stats })),
+          signal:  AbortSignal.timeout(10000),
+        });
+      } catch(e) { /* [CERTAIN] 統計送信失敗は完全に無視。圧縮結果は保護される */ }
+    })();
   }
-
-  var byMonth = {};
-  splitResult.forEach(function(item, idx) {
-    if (!byMonth[item.monthKey]) byMonth[item.monthKey] = [];
-    byMonth[item.monthKey].push({ item: item, idx: idx });
-  });
-
-  Object.keys(byMonth).sort().forEach(function(mk) {
-    var entries = byMonth[mk];
-    var totalMB = entries.reduce(function(a,e){ return a + parseFloat(e.item.sizeMB); }, 0).toFixed(2);
-    var totalC  = entries.reduce(function(a,e){ return a + e.item.convCount; }, 0);
-
-    html += '<div class="month-group"><div class="month-header">'
-      + '<div><div class="month-title">📅 ' + mk + '</div>'
-      + '<div class="month-meta">' + entries.length + ' ファイル　' + totalC + ' 件　' + totalMB + ' MB</div></div>'
-      + '<button class="month-dl" onclick="downloadMonth(\'' + mk + '\')">📦 ZIP</button>'
-      + '</div><div class="split-list">';
-
-    entries.forEach(function(e) {
-      var warn = "";
-      if (!e.item.mdscSafe) warn += ' <span style="color:var(--warn);font-size:10px;">⚠️ MDSC 100MB超</span>';
-      if (e.item.oversizeWarn) warn += ' <span style="color:var(--warn);font-size:10px;">⚠️ 1件超過あり</span>';
-      html += '<div class="split-item">'
-        + '<span class="split-name">' + escHtml(e.item.filename) + warn + '</span>'
-        + '<span class="split-info">' + e.item.convCount + '件 / ' + e.item.sizeMB + 'MB</span>'
-        + '<button class="split-dl" onclick="downloadOne(' + e.idx + ')">⬇ DL</button></div>';
-    });
-    html += '</div></div>';
-  });
-
-  html += '<button class="btn-dl-all" onclick="downloadAll()">📦 すべてまとめてZIPダウンロード</button>';
-  cont.innerHTML = html;
-  document.getElementById("mdscBannerSplit").style.display = "block";
-  card.scrollIntoView({ behavior: "smooth" });
 }
 
-// ── ダウンロード ──
-function downloadOne(idx) { var item = splitResult[idx]; if (!item) return; triggerDownload(JSON.stringify(item.data, null, 2), item.filename); }
+function downloadResult() {
+  if (!mergedMarkdown) return;
+  const ts   = new Date().toISOString().slice(0,19).replace(/[T:]/g,"-");
+  const blob = new Blob([mergedMarkdown], { type:"text/markdown;charset=utf-8" });
+  const a    = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download:`MDSC_${ts}.md` });
+  a.click(); URL.revokeObjectURL(a.href);
+}
 
-function downloadMonth(monthKey) {
-  var items = splitResult.filter(function(x){ return x.monthKey === monthKey; });
-  if (items.length === 1) { downloadOne(splitResult.indexOf(items[0])); return; }
-  var zip = new JSZip(); var folder = zip.folder(monthKey);
-  items.forEach(function(item) { folder.file(item.filename, JSON.stringify(item.data, null, 2)); });
-  var lines = ["MDSC JSON Splitter v1.5 - 月別レポート: " + monthKey, "生成日時: " + new Date().toLocaleString("ja-JP"), "=================================================="];
-  items.forEach(function(item) {
-    lines.push("■ " + item.filename + " (" + item.convCount + "件 / " + item.sizeMB + "MB)");
-    item.titles.forEach(function(t, i) { lines.push("  " + String(i+1).padStart(3," ") + ". [" + t.date + "] " + t.title); });
-    lines.push("");
+// ================================================================
+// ファイル読み込み（BOM対応）
+// ================================================================
+function readFile(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = e => { let raw = e.target.result; if (raw.charCodeAt(0)===0xFEFF) raw=raw.slice(1); resolve(raw); };
+    r.onerror = () => reject(new Error("読み込み失敗"));
+    r.readAsText(file, "utf-8");
   });
-  zip.file(monthKey + "_report.txt", lines.join("\n"));
-  zip.generateAsync({ type: "blob" }).then(function(blob) { triggerDownloadBlob(blob, monthKey + "_conversations.zip"); });
 }
 
-function downloadAll() {
-  var zip = new JSZip();
-  var inputFiles = Object.keys(fileMap).map(function(k) { return fileMap[k].name; });
-  var byMonth = {};
-  splitResult.forEach(function(item) { if (!byMonth[item.monthKey]) byMonth[item.monthKey] = []; byMonth[item.monthKey].push(item); });
-  Object.keys(byMonth).forEach(function(mk) { var folder = zip.folder(mk); byMonth[mk].forEach(function(item) { folder.file(item.filename, JSON.stringify(item.data, null, 2)); }); });
-  zip.file("MDSC_split_report.txt", buildReportTxt(inputFiles));
-  zip.generateAsync({ type: "blob" }).then(function(blob) { triggerDownloadBlob(blob, "MDSC_split_all.zip"); });
-}
-
-function buildReportTxt(inputFiles) {
-  var lines = [
-    "================================================================",
-    "MDSC JSON Splitter v1.5 - 分割レポート",
-    "================================================================",
-    "生成日時  : " + new Date().toLocaleString("ja-JP"),
-    "最大サイズ: " + (document.getElementById("sizeSlider").value||"10") + " MB", "",
-    "【入力ファイル】"
-  ];
-  inputFiles.forEach(function(fn) { lines.push("  - " + fn); });
-  lines.push("");
-  if (skipLog.length > 0) { lines.push("【スキップしたファイル】"); skipLog.forEach(function(s){ lines.push("  - " + s.filename + "  ← " + s.reason); }); lines.push(""); }
-  lines.push("【分割結果】", "  生成ファイル数: " + splitResult.length, "  総会話数      : " + splitResult.reduce(function(a,x){ return a+x.convCount; },0), "");
-  var byMonth = {};
-  splitResult.forEach(function(item) { if (!byMonth[item.monthKey]) byMonth[item.monthKey]=[]; byMonth[item.monthKey].push(item); });
-  Object.keys(byMonth).sort().forEach(function(mk) {
-    lines.push("----------------------------------------------------------------", "■ " + mk);
-    byMonth[mk].forEach(function(item) {
-      lines.push("  ファイル: " + item.filename, "  件数    : " + item.convCount + " 件 / 計算サイズ: " + item.sizeMB + " MB");
-      if (item.oversizeWarn) lines.push("  ⚠️  1件超過あり");
-      if (!item.mdscSafe)    lines.push("  ⚠️  MDSC 100MB超");
-      lines.push("  会話一覧:");
-      item.titles.forEach(function(t, i) { lines.push("    " + String(i+1).padStart(3," ") + ". [" + t.date + "] " + t.title + (t.id ? "  (ID: " + t.id.toString().slice(0,8) + "...)" : "")); });
-      lines.push("");
-    });
+// ================================================================
+// IndexedDB（タブ閉じ対策）
+// ================================================================
+function idbOpen() {
+  return new Promise((res,rej) => {
+    const req = indexedDB.open("mdsc_progress", 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore("chunks",{keyPath:"key"});
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e.target.error);
   });
-  lines.push("================================================================", "Generated by MDSC JSON Splitter v1.5", "================================================================");
-  return lines.join("\n");
+}
+async function idbSave(key, val) {
+  try { const db=await idbOpen(); db.transaction("chunks","readwrite").objectStore("chunks").put({key,...val}); }
+  catch(e) { /* 保存失敗は無視 */ }
 }
 
-function triggerDownload(text, filename) { triggerDownloadBlob(new Blob([text], { type: "application/json;charset=utf-8" }), filename); }
-function triggerDownloadBlob(blob, filename) { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
-
-// ── ユーティリティ ──
+// ================================================================
+// UI ヘルパー
+// ================================================================
 function setProgress(show, label, pct) {
   document.getElementById("progressWrap").style.display = show ? "block" : "none";
-  document.getElementById("progressFill").style.width   = pct + "%";
-  document.getElementById("progressLabel").textContent  = label;
+  if (show) {
+    document.getElementById("progressBar").style.width   = (pct||0)+"%";
+    document.getElementById("progressLabel").textContent = label||"";
+  }
 }
-function summaryBox(val, lbl) { return '<div class="summary-box"><div class="summary-val">'+val+'</div><div class="summary-lbl">'+lbl+'</div></div>'; }
-function showToast(msg) { var t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(function() { t.classList.remove("show"); }, 3000); }
-function escHtml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function setStatus(type, msg) {
+  const el = document.getElementById("statusBar");
+  el.style.display = "block"; el.className = type; el.textContent = msg;
+}
+function toMB(c) { return (c/1000000).toFixed(1)+"MB"; }
+function toKB(c) { return (c/1000).toFixed(1)+"KB"; }
 </script>
 </body>
 </html>
